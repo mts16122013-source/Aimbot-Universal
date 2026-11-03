@@ -1,685 +1,341 @@
--- universal_hub.lua — Roblox Luau | LinoriaLib
--- Aimbot (FOV circle, silent, visible check, force, hitbox, prediction)
--- ESP (Box, Skeleton, Name, Display, Health, Distance, Line, Weapon, Inventory)
--- Movement (Speed, Jump, Infinite Jump, Fly, Freeze Anims)
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
-local cfg = {
-    -- aimbot
-    aim_enabled = false,
-    silent = true,
-    fov = 120,
-    fov_visible = false,
-    visible_check = true,
-    force_aim = true,
-    prediction = 0.15,
-    hitbox = "Head",
-    aim_key = Enum.UserInputType.MouseButton2,
+local K = getgenv().karpa or {}
+getgenv().karpa = K
 
-    -- esp
-    esp_line = false,
-    esp_line_origin = "top",
-    esp_skeleton = false,
-    esp_box = false,
-    esp_health = false,
-    esp_name = false,
-    esp_display = false,
-    esp_weapon = false,
-    esp_distance = false,
-    esp_inventory = false,
-
-    -- movement
-    speed = 16,
-    speed_enabled = false,
-    jump_power = 50,
-    jump_enabled = false,
-    infinite_jump = false,
-    fly = false,
-    fly_speed = 50,
-    freeze_anims = false,
+K.cfg = {
+    aim_enabled=false, aim_hide_click=false, silent=true, fov=120, fov_visible=false,
+    visible_check=true, force_aim=true, prediction=0.15, hitbox="Head",
+    aim_key=Enum.UserInputType.MouseButton2,
+    esp_line=false, esp_line_origin="top", esp_skeleton=false, esp_box=false,
+    esp_health=false, esp_name=false, esp_display=false, esp_weapon=false,
+    esp_distance=false, esp_inventory=false,
+    speed=16, speed_enabled=false, jump_power=50, jump_enabled=false,
+    infinite_jump=false, fly=false, fly_speed=50,
+    freeze_anims=false, spinbot=false, spin_speed=360,
 }
+local cfg = K.cfg
 
--- ============================================================
--- DRAWING — FOV CIRCLE
--- ============================================================
-local fov_circle = Drawing.new("Circle")
-fov_circle.Thickness = 1
-fov_circle.NumSides = 64
-fov_circle.Color = Color3.fromRGB(255, 255, 255)
-fov_circle.Transparency = 0.5
-fov_circle.Filled = false
-fov_circle.Visible = false
+K.esp_objects = {}
+local esp_objects = K.esp_objects
 
--- ============================================================
--- ESP — DRAWING CACHE
--- ============================================================
-local esp_objects = {}
-
-local function create_drawing(class, props)
+local function cd(class, props)
     local d = Drawing.new(class)
-    for k, v in pairs(props) do d[k] = v end
+    for k,v in pairs(props) do d[k]=v end
     return d
 end
 
-local function remove_esp(player)
+function K.remove_esp(player)
     local obj = esp_objects[player]
     if not obj then return end
-    for _, v in pairs(obj) do
-        if typeof(v) == "table" then
-            for _, line in ipairs(v) do line:Remove() end
-        elseif v.Remove then
-            v:Remove()
-        end
+    for _,v in pairs(obj) do
+        if typeof(v)=="table" then
+            for _,l in ipairs(v) do l:Remove() end
+        elseif v.Remove then v:Remove() end
     end
-    esp_objects[player] = nil
+    esp_objects[player]=nil
 end
 
 local function create_esp(player)
-    if player == LocalPlayer or esp_objects[player] then return end
-    local obj = {}
-    obj.line      = create_drawing("Line",   { Thickness = 1, Color = Color3.fromRGB(255,255,255), Transparency = 0.8, Visible = false })
-    obj.box       = create_drawing("Square", { Thickness = 1, Color = Color3.fromRGB(255,255,255), Filled = false, Transparency = 0.7, Visible = false })
-    obj.name      = create_drawing("Text",   { Size = 14, Center = true, Outline = true, Color = Color3.fromRGB(255,255,255), Visible = false })
-    obj.display   = create_drawing("Text",   { Size = 12, Center = true, Outline = true, Color = Color3.fromRGB(200,200,200), Visible = false })
-    obj.health    = create_drawing("Text",   { Size = 12, Center = true, Outline = true, Color = Color3.fromRGB(0,255,0), Visible = false })
-    obj.distance  = create_drawing("Text",   { Size = 12, Center = true, Outline = true, Color = Color3.fromRGB(180,180,255), Visible = false })
-    obj.weapon    = create_drawing("Text",   { Size = 12, Center = true, Outline = true, Color = Color3.fromRGB(255,200,0), Visible = false })
-    obj.inventory = create_drawing("Text",   { Size = 11, Center = true, Outline = true, Color = Color3.fromRGB(255,140,80), Visible = false })
-    obj.skeleton  = {}
-    for i = 1, 20 do
-        obj.skeleton[i] = create_drawing("Line", { Thickness = 1, Color = Color3.fromRGB(255,255,255), Transparency = 0.8, Visible = false })
-    end
-    esp_objects[player] = obj
+    if player==LocalPlayer or esp_objects[player] then return end
+    local o={}
+    o.line=cd("Line",{Thickness=1,Color=Color3.fromRGB(255,255,255),Transparency=0.8,Visible=false})
+    o.box=cd("Square",{Thickness=1,Color=Color3.fromRGB(255,255,255),Filled=false,Transparency=0.7,Visible=false})
+    o.hp_bg=cd("Square",{Filled=true,Color=Color3.fromRGB(35,35,35),Transparency=0.7,Visible=false})
+    o.hp_fill=cd("Square",{Filled=true,Color=Color3.fromRGB(0,220,80),Transparency=0.9,Visible=false})
+    o.name=cd("Text",{Size=14,Center=true,Outline=true,Color=Color3.fromRGB(255,255,255),Visible=false})
+    o.display=cd("Text",{Size=12,Center=true,Outline=true,Color=Color3.fromRGB(200,200,200),Visible=false})
+    o.distance=cd("Text",{Size=12,Center=true,Outline=true,Color=Color3.fromRGB(180,180,255),Visible=false})
+    o.weapon=cd("Text",{Size=12,Center=true,Outline=true,Color=Color3.fromRGB(255,200,0),Visible=false})
+    o.inventory=cd("Text",{Size=11,Center=true,Outline=true,Color=Color3.fromRGB(255,140,80),Visible=false})
+    o.skeleton={}
+    for i=1,20 do o.skeleton[i]=cd("Line",{Thickness=1,Color=Color3.fromRGB(255,255,255),Transparency=0.8,Visible=false}) end
+    esp_objects[player]=o
 end
 
-local skeleton_connections = {
-    { "Head", "UpperTorso" }, { "UpperTorso", "LowerTorso" }, { "LowerTorso", "HumanoidRootPart" },
-    { "UpperTorso", "LeftUpperArm" }, { "LeftUpperArm", "LeftLowerArm" }, { "LeftLowerArm", "LeftHand" },
-    { "UpperTorso", "RightUpperArm" }, { "RightUpperArm", "RightLowerArm" }, { "RightLowerArm", "RightHand" },
-    { "LowerTorso", "LeftUpperLeg" }, { "LeftUpperLeg", "LeftLowerLeg" }, { "LeftLowerLeg", "LeftFoot" },
-    { "LowerTorso", "RightUpperLeg" }, { "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" },
+local skel={
+    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"LowerTorso","HumanoidRootPart"},
+    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
 }
 
--- ============================================================
--- HELPERS — WEAPON / INVENTORY
--- ============================================================
-local function get_equipped_tool(character)
-    for _, hand_name in ipairs({ "RightHand", "LeftHand" }) do
-        local hand = character:FindFirstChild(hand_name)
-        if hand then
-            for _, child in ipairs(hand:GetChildren()) do
-                if child:IsA("Tool") then return child.Name end
-            end
-        end
+local function equipped(c)
+    for _,h in ipairs({"RightHand","LeftHand"}) do
+        local hd=c:FindFirstChild(h)
+        if hd then for _,ch in ipairs(hd:GetChildren()) do if ch:IsA("Tool") then return ch.Name end end end
     end
-    for _, child in ipairs(character:GetChildren()) do
-        if child:IsA("Tool") then return child.Name end
-    end
+    for _,ch in ipairs(c:GetChildren()) do if ch:IsA("Tool") then return ch.Name end end
     return nil
 end
 
-local function get_inventory_items(player, character)
-    local items = {}
-    -- equipado (na mão)
-    for _, child in ipairs(character:GetChildren()) do
-        if child:IsA("Tool") then
-            table.insert(items, "[eq] " .. child.Name)
-        end
-    end
-    -- mochila (guardado)
-    local backpack = player:FindFirstChildOfClass("Backpack")
-    if backpack then
-        for _, child in ipairs(backpack:GetChildren()) do
-            if child:IsA("Tool") then
-                table.insert(items, child.Name)
-            end
-        end
-    end
-    return items
+local function inv(p,c)
+    local t={}
+    for _,ch in ipairs(c:GetChildren()) do if ch:IsA("Tool") then table.insert(t,"[eq] "..ch.Name) end end
+    local bp=p:FindFirstChildOfClass("Backpack")
+    if bp then for _,ch in ipairs(bp:GetChildren()) do if ch:IsA("Tool") then table.insert(t,ch.Name) end end end
+    return t
 end
 
-local function hide_all(obj)
-    obj.line.Visible = false
-    obj.box.Visible = false
-    obj.name.Visible = false
-    obj.display.Visible = false
-    obj.health.Visible = false
-    obj.distance.Visible = false
-    obj.weapon.Visible = false
-    obj.inventory.Visible = false
-    for _, line in ipairs(obj.skeleton) do line.Visible = false end
+local function fullbox(c,head)
+    local hp,hon=Camera:WorldToViewportPoint(head.Position+Vector3.new(0,0.7,0))
+    if not hon then return nil end
+    local fs=nil
+    for _,n in ipairs({"LeftFoot","RightFoot","LeftLowerLeg","RightLowerLeg"}) do
+        local pt=c:FindFirstChild(n)
+        if pt and pt:IsA("BasePart") then
+            local p,on=Camera:WorldToViewportPoint(pt.Position)
+            if on and (not fs or p.Y>fs.Y) then fs=p end
+        end
+    end
+    if not fs then return nil end
+    local h=fs.Y-hp.Y
+    if h<=0 then return nil end
+    local w=h*0.45
+    return Vector2.new(hp.X-w/2,hp.Y),w,h
 end
 
--- ============================================================
--- ESP — UPDATE
--- ============================================================
-local function update_esp()
-    local screen_size = Camera.ViewportSize
-    local top_center    = Vector2.new(screen_size.X / 2, 0)
-    local bottom_center = Vector2.new(screen_size.X / 2, screen_size.Y)
-    local mid_center    = Vector2.new(screen_size.X / 2, screen_size.Y / 2)
-
-    local my_char = LocalPlayer.Character
-    local my_hrp  = my_char and my_char:FindFirstChild("HumanoidRootPart")
-
-    local any_enabled = cfg.esp_line or cfg.esp_skeleton or cfg.esp_box
-        or cfg.esp_health or cfg.esp_name or cfg.esp_display
-        or cfg.esp_weapon or cfg.esp_distance or cfg.esp_inventory
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end
-        if not any_enabled then
-            if esp_objects[player] then hide_all(esp_objects[player]) end
+local function hide(o)
+    o.line.Visible=false; o.box.Visible=false
+    o.hp_bg.Visible=false; o.hp_fill.Visible=false
+    o.name.Visible=false; o.display.Visible=false
+    o.distance.Visible=false; o.weapon.Visible=false; o.inventory.Visible=false
+    for _,l in ipairs(o.skeleton) do l.Visible=false end
+end
+function K.update_esp()
+    local ss=Camera.ViewportSize
+    local top=Vector2.new(ss.X/2,0)
+    local bot=Vector2.new(ss.X/2,ss.Y)
+    local mid=Vector2.new(ss.X/2,ss.Y/2)
+    local mc=LocalPlayer.Character
+    local mh=mc and mc:FindFirstChild("HumanoidRootPart")
+    local any=cfg.esp_line or cfg.esp_skeleton or cfg.esp_box or cfg.esp_health
+        or cfg.esp_name or cfg.esp_display or cfg.esp_weapon or cfg.esp_distance or cfg.esp_inventory
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p==LocalPlayer then continue end
+        if not any then
+            if esp_objects[p] then hide(esp_objects[p]) end
             continue
         end
-        if not esp_objects[player] then create_esp(player) end
-        local obj = esp_objects[player]
-
-        local char = player.Character
-        if not char then hide_all(obj) continue end
-
-        local hrp      = char:FindFirstChild("HumanoidRootPart")
-        local head     = char:FindFirstChild("Head")
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not head or not humanoid or humanoid.Health <= 0 then hide_all(obj) continue end
-
-        local root_pos, root_on = Camera:WorldToViewportPoint(hrp.Position)
-        local head_pos, head_on = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-        if not root_on and not head_on then hide_all(obj) continue end
-
-        local screen_root = Vector2.new(root_pos.X, root_pos.Y)
-        local screen_head = Vector2.new(head_pos.X, head_pos.Y)
-
-        -- LINE
+        if not esp_objects[p] then create_esp(p) end
+        local o=esp_objects[p]
+        local c=p.Character
+        if not c then hide(o) continue end
+        local hrp=c:FindFirstChild("HumanoidRootPart")
+        local head=c:FindFirstChild("Head")
+        local hum=c:FindFirstChildOfClass("Humanoid")
+        if not hrp or not head or not hum or hum.Health<=0 then hide(o) continue end
+        local rp,ron=Camera:WorldToViewportPoint(hrp.Position)
+        local hp,hon=Camera:WorldToViewportPoint(head.Position)
+        if not ron and not hon then hide(o) continue end
+        local sr=Vector2.new(rp.X,rp.Y)
+        local sh=Vector2.new(hp.X,hp.Y)
         if cfg.esp_line then
-            local origin = top_center
-            if cfg.esp_line_origin == "bottom" then origin = bottom_center
-            elseif cfg.esp_line_origin == "center" then origin = mid_center end
-            obj.line.From = origin
-            obj.line.To = screen_root
-            obj.line.Visible = true
-        else obj.line.Visible = false end
-
-        -- BOX
-        if cfg.esp_box then
-            local height = math.abs(screen_head.Y - screen_root.Y) * 1.8
-            local width = height * 0.6
-            obj.box.Size = Vector2.new(width, height)
-            obj.box.Position = Vector2.new(screen_head.X - width / 2, screen_head.Y - height * 0.15)
-            obj.box.Visible = true
-        else obj.box.Visible = false end
-
-        -- DISTANCE (em cima do nome)
-        if cfg.esp_distance and my_hrp then
-            local dist = (my_hrp.Position - hrp.Position).Magnitude
-            obj.distance.Text = string.format("%d m", math.floor(dist))
-            obj.distance.Position = Vector2.new(screen_head.X, screen_head.Y - 38)
-            obj.distance.Visible = true
-        else obj.distance.Visible = false end
-
-        -- NAME (@user)
+            local ori=top
+            if cfg.esp_line_origin=="bottom" then ori=bot
+            elseif cfg.esp_line_origin=="center" then ori=mid end
+            o.line.From=ori; o.line.To=sr; o.line.Visible=true
+        else o.line.Visible=false end
+        local bl,bw,bh
+        if cfg.esp_box or cfg.esp_health then bl,bw,bh=fullbox(c,head) end
+        if cfg.esp_box and bl then
+            o.box.Size=Vector2.new(bw,bh); o.box.Position=bl; o.box.Visible=true
+        else o.box.Visible=false end
+        if cfg.esp_health and bl then
+            local r=math.clamp(hum.Health/math.max(hum.MaxHealth,1),0,1)
+            local bx=bl.X-7
+            o.hp_bg.Size=Vector2.new(3,bh); o.hp_bg.Position=Vector2.new(bx,bl.Y); o.hp_bg.Visible=true
+            o.hp_fill.Size=Vector2.new(3,bh*r); o.hp_fill.Position=Vector2.new(bx,bl.Y+bh*(1-r))
+            o.hp_fill.Color=Color3.fromRGB(math.floor(255*(1-r)),math.floor(220*r),60)
+            o.hp_fill.Visible=true
+        else o.hp_bg.Visible=false; o.hp_fill.Visible=false end
+        if cfg.esp_distance and mh then
+            o.distance.Text=string.format("%d m",math.floor((mh.Position-hrp.Position).Magnitude))
+            o.distance.Position=Vector2.new(sh.X,sh.Y-38); o.distance.Visible=true
+        else o.distance.Visible=false end
         if cfg.esp_name then
-            obj.name.Text = "@" .. player.Name
-            obj.name.Position = Vector2.new(screen_head.X, screen_head.Y - 22)
-            obj.name.Visible = true
-        else obj.name.Visible = false end
-
-        -- DISPLAY
+            o.name.Text="@"..p.Name; o.name.Position=Vector2.new(sh.X,sh.Y-22); o.name.Visible=true
+        else o.name.Visible=false end
         if cfg.esp_display then
-            obj.display.Text = player.DisplayName
-            obj.display.Position = Vector2.new(screen_head.X, screen_head.Y - 6)
-            obj.display.Visible = true
-        else obj.display.Visible = false end
-
-        -- HEALTH
-        if cfg.esp_health then
-            local ratio = humanoid.Health / math.max(humanoid.MaxHealth, 1)
-            obj.health.Text = string.format("%d HP", math.floor(humanoid.Health))
-            obj.health.Position = Vector2.new(screen_head.X, screen_root.Y + 8)
-            obj.health.Color = Color3.fromRGB(math.floor(255 * (1 - ratio)), math.floor(255 * ratio), 0)
-            obj.health.Visible = true
-        else obj.health.Visible = false end
-
-        -- WEAPON (equipado)
+            o.display.Text=p.DisplayName; o.display.Position=Vector2.new(sh.X,sh.Y-6); o.display.Visible=true
+        else o.display.Visible=false end
         if cfg.esp_weapon then
-            local weapon = get_equipped_tool(char)
-            if weapon then
-                obj.weapon.Text = weapon
-                obj.weapon.Position = Vector2.new(screen_head.X, screen_root.Y + 22)
-                obj.weapon.Visible = true
-            else obj.weapon.Visible = false end
-        else obj.weapon.Visible = false end
-
-        -- INVENTORY (mão + mochila)
+            local w=equipped(c)
+            if w then o.weapon.Text=w; o.weapon.Position=Vector2.new(sh.X,sr.Y+22); o.weapon.Visible=true
+            else o.weapon.Visible=false end
+        else o.weapon.Visible=false end
         if cfg.esp_inventory then
-            local items = get_inventory_items(player, char)
-            if #items > 0 then
-                local show = {}
-                for i = 1, math.min(#items, 6) do
-                    table.insert(show, items[i])
-                end
-                local txt = table.concat(show, " | ")
-                if #items > 6 then txt = txt .. " +" .. (#items - 6) end
-                obj.inventory.Text = txt
-                obj.inventory.Position = Vector2.new(screen_head.X, screen_root.Y + 36)
-                obj.inventory.Visible = true
-            else obj.inventory.Visible = false end
-        else obj.inventory.Visible = false end
-
-        -- SKELETON
+            local it=inv(p,c)
+            if #it>0 then
+                local s={}
+                for i=1,math.min(#it,6) do table.insert(s,it[i]) end
+                local txt=table.concat(s," | ")
+                if #it>6 then txt=txt.." +"..(#it-6) end
+                o.inventory.Text=txt; o.inventory.Position=Vector2.new(sh.X,sr.Y+36); o.inventory.Visible=true
+            else o.inventory.Visible=false end
+        else o.inventory.Visible=false end
         if cfg.esp_skeleton then
-            local idx = 1
-            for _, conn in ipairs(skeleton_connections) do
-                local p1 = char:FindFirstChild(conn[1])
-                local p2 = char:FindFirstChild(conn[2])
+            local i=1
+            for _,cn in ipairs(skel) do
+                local p1=c:FindFirstChild(cn[1]); local p2=c:FindFirstChild(cn[2])
                 if p1 and p2 and p1:IsA("BasePart") and p2:IsA("BasePart") then
-                    local sp1, on1 = Camera:WorldToViewportPoint(p1.Position)
-                    local sp2, on2 = Camera:WorldToViewportPoint(p2.Position)
-                    if on1 and on2 and idx <= #obj.skeleton then
-                        local line = obj.skeleton[idx]
-                        line.From = Vector2.new(sp1.X, sp1.Y)
-                        line.To = Vector2.new(sp2.X, sp2.Y)
-                        line.Visible = true
-                        idx = idx + 1
+                    local s1,o1=Camera:WorldToViewportPoint(p1.Position)
+                    local s2,o2=Camera:WorldToViewportPoint(p2.Position)
+                    if o1 and o2 and i<=#o.skeleton then
+                        local l=o.skeleton[i]
+                        l.From=Vector2.new(s1.X,s1.Y); l.To=Vector2.new(s2.X,s2.Y); l.Visible=true
+                        i=i+1
                     end
                 end
             end
-            for i = idx, #obj.skeleton do obj.skeleton[i].Visible = false end
-        else
-            for _, line in ipairs(obj.skeleton) do line.Visible = false end
-        end
+            for j=i,#o.skeleton do o.skeleton[j].Visible=false end
+        else for _,l in ipairs(o.skeleton) do l.Visible=false end end
     end
 end
 
--- ============================================================
--- AIMBOT
--- ============================================================
-local function is_visible(part)
+local fovc=Drawing.new("Circle")
+fovc.Thickness=1; fovc.NumSides=64
+fovc.Color=Color3.fromRGB(255,255,255); fovc.Transparency=0.5; fovc.Filled=false; fovc.Visible=false
+K.fov_circle=fovc
+
+local function vis(part)
     if not cfg.visible_check then return true end
-    local origin = Camera.CFrame.Position
-    local target = part.Position
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = { LocalPlayer.Character, Camera }
-    params.IgnoreWater = true
-    local result = workspace:Raycast(origin, target - origin, params)
-    if not result then return true end
-    return result.Instance:IsDescendantOf(part.Parent)
+    local o=Camera.CFrame.Position
+    local rp=RaycastParams.new()
+    rp.FilterType=Enum.RaycastFilterType.Exclude
+    rp.FilterDescendantsInstances={LocalPlayer.Character,Camera}
+    rp.IgnoreWater=true
+    local r=workspace:Raycast(o,part.Position-o,rp)
+    if not r then return true end
+    return r.Instance:IsDescendantOf(part.Parent)
 end
 
-local function get_target()
-    local best, best_dist = nil, cfg.fov
-    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end
-        local char = player.Character
-        if not char then continue end
-        local part = char:FindFirstChild(cfg.hitbox)
-        if not part or not part:IsA("BasePart") then continue end
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if not humanoid or humanoid.Health <= 0 then continue end
-        local pos, on_screen = Camera:WorldToViewportPoint(part.Position)
-        if not on_screen then continue end
-        local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-        if dist > cfg.fov then continue end
-        if not is_visible(part) then continue end
-        if dist < best_dist then best, best_dist = part, dist end
+local function target()
+    local best,bd=nil,cfg.fov
+    local ce=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p==LocalPlayer then continue end
+        local c=p.Character
+        if not c then continue end
+        local pt=c:FindFirstChild(cfg.hitbox)
+        if not pt or not pt:IsA("BasePart") then continue end
+        local h=c:FindFirstChildOfClass("Humanoid")
+        if not h or h.Health<=0 then continue end
+        local pos,on=Camera:WorldToViewportPoint(pt.Position)
+        if not on then continue end
+        local d=(Vector2.new(pos.X,pos.Y)-ce).Magnitude
+        if d>cfg.fov then continue end
+        if not vis(pt) then continue end
+        if d<bd then best,bd=pt,d end
     end
     return best
 end
 
-local function aim_at(target)
-    if not target then return end
-    local aim_pos = target.Position + target.AssemblyLinearVelocity * cfg.prediction
-    local ok, new_cf = pcall(function()
-        return CFrame.lookAt(Camera.CFrame.Position, aim_pos)
-    end)
+local function aim(t)
+    local ap=t.Position+t.AssemblyLinearVelocity*cfg.prediction
+    local ok,ncf=pcall(function() return CFrame.lookAt(Camera.CFrame.Position,ap) end)
     if ok then
-        Camera.CFrame = new_cf
-        if cfg.force_aim then
-            task.wait()
-            pcall(function() Camera.CFrame = new_cf end)
-        end
+        Camera.CFrame=ncf
+        if cfg.force_aim then task.wait(); pcall(function() Camera.CFrame=ncf end) end
     end
 end
 
--- ============================================================
--- MOVEMENT
--- ============================================================
-local function apply_speed()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    humanoid.WalkSpeed = cfg.speed_enabled and cfg.speed or 16
+function K.update_aim()
+    if cfg.fov_visible then
+        fovc.Position=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
+        fovc.Radius=cfg.fov; fovc.Visible=true
+    else fovc.Visible=false end
+    if not cfg.aim_enabled then return end
+    local act=true
+    if cfg.aim_hide_click then act=UserInputService:IsMouseButtonPressed(cfg.aim_key) end
+    if not act then return end
+    local t=target()
+    if t then aim(t) end
 end
 
-local function apply_jump_power()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    if cfg.jump_enabled then
-        humanoid.UseJumpPower = true
-        humanoid.JumpPower = cfg.jump_power
-    else
-        humanoid.JumpPower = 50
+local fly=nil
+function K.update_movement()
+    local c=LocalPlayer.Character
+    if not c then return end
+    local h=c:FindFirstChildOfClass("Humanoid")
+    if not h then return end
+    h.WalkSpeed=cfg.speed_enabled and cfg.speed or 16
+    if cfg.jump_enabled then h.UseJumpPower=true; h.JumpPower=cfg.jump_power
+    else h.JumpPower=50 end
+    local hrp=c:FindFirstChild("HumanoidRootPart")
+    if not hrp or not cfg.fly then
+        if fly then fly:Destroy() fly=nil end
+        return
     end
+    if not fly or fly.Parent~=hrp then
+        if fly then fly:Destroy() end
+        fly=Instance.new("BodyVelocity")
+        fly.MaxForce=Vector3.new(1e5,1e5,1e5); fly.Velocity=Vector3.zero; fly.Parent=hrp
+    end
+    local d=Vector3.zero
+    local cc=Camera.CFrame
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then d+=cc.LookVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then d-=cc.LookVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then d-=cc.RightVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then d+=cc.RightVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then d+=Vector3.new(0,1,0) end
+    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then d-=Vector3.new(0,1,0) end
+    if d.Magnitude>0 then d=d.Unit end
+    fly.Velocity=d*cfg.fly_speed
 end
 
 UserInputService.JumpRequest:Connect(function()
     if cfg.infinite_jump then
-        local char = LocalPlayer.Character
-        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+        local c=LocalPlayer.Character
+        local h=c and c:FindFirstChildOfClass("Humanoid")
+        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
 end)
 
-local fly_bv = nil
-local function update_fly()
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp or not cfg.fly then
-        if fly_bv then fly_bv:Destroy() fly_bv = nil end
+local spin_g,spin_a=nil,0
+
+function K.restore_anims()
+    local c=LocalPlayer.Character
+    if not c then return end
+    local h=c:FindFirstChildOfClass("Humanoid")
+    if not h then return end
+    local an=h:FindFirstChildOfClass("Animator")
+    if not an then return end
+    for _,t in ipairs(an:GetPlayingAnimationTracks()) do
+        if t.Speed==0 then t:AdjustSpeed(1) end
+    end
+end
+
+function K.update_misc(dt)
+    local c=LocalPlayer.Character
+    if not c then return end
+    local h=c:FindFirstChildOfClass("Humanoid")
+    local hrp=c:FindFirstChild("HumanoidRootPart")
+    if cfg.freeze_anims and h then
+        local an=h:FindFirstChildOfClass("Animator")
+        if an then
+            for _,t in ipairs(an:GetPlayingAnimationTracks()) do
+                if t.Speed~=0 then t:AdjustSpeed(0) end
+            end
+        end
+    end
+    if not hrp or not cfg.spinbot then
+        if spin_g then spin_g:Destroy() spin_g=nil end
         return
     end
-    if not fly_bv or fly_bv.Parent ~= hrp then
-        if fly_bv then fly_bv:Destroy() end
-        fly_bv = Instance.new("BodyVelocity")
-        fly_bv.Name = "KarpaFly"
-        fly_bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-        fly_bv.Velocity = Vector3.zero
-        fly_bv.Parent = hrp
+    if not spin_g or spin_g.Parent~=hrp then
+        if spin_g then spin_g:Destroy() end
+        spin_g=Instance.new("BodyGyro")
+        spin_g.MaxTorque=Vector3.new(1e5,1e5,1e5); spin_g.P=1e4; spin_g.Parent=hrp
     end
-    local dir = Vector3.zero
-    local cam_cf = Camera.CFrame
-    if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cam_cf.LookVector end
-    if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cam_cf.LookVector end
-    if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= cam_cf.RightVector end
-    if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam_cf.RightVector end
-    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
-    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.new(0, 1, 0) end
-    if dir.Magnitude > 0 then dir = dir.Unit end
-    fly_bv.Velocity = dir * cfg.fly_speed
+    spin_a=spin_a+math.rad(cfg.spin_speed)*dt
+    if spin_a>math.pi*2 then spin_a-=math.pi*2 end
+    spin_g.CFrame=CFrame.new(hrp.Position)*CFrame.Angles(0,spin_a,0)
 end
 
-local function freeze_anims_tick()
-    if not cfg.freeze_anims then return end
-    local char = LocalPlayer.Character
-    if not char then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    local animator = humanoid:FindFirstChildOfClass("Animator")
-    if not animator then return end
-    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-        if track.Speed ~= 0 then track:AdjustSpeed(0) end
-    end
-end
-
-local function restore_anims()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    local animator = humanoid:FindFirstChildOfClass("Animator")
-    if not animator then return end
-    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-        if track.Speed == 0 then track:AdjustSpeed(1) end
-    end
-end
-
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-    apply_speed()
-    apply_jump_power()
-end)
-
--- ============================================================
--- LOOPS
--- ============================================================
-RunService.RenderStepped:Connect(function()
-    -- fov circle
-    if cfg.fov_visible then
-        fov_circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-        fov_circle.Radius = cfg.fov
-        fov_circle.Visible = true
-    else
-        fov_circle.Visible = false
-    end
-
-    update_esp()
-    update_fly()
-    freeze_anims_tick()
-    apply_speed()
-    apply_jump_power()
-end)
-
-RunService:BindToRenderStep("KarpaAim", Enum.RenderPriority.Camera.Value + 1, function()
-    if cfg.aim_enabled and UserInputService:IsMouseButtonPressed(cfg.aim_key) then
-        local target = get_target()
-        if target then aim_at(target) end
-    end
-end)
-
--- ============================================================
--- UI — LINORIA
--- ============================================================
-local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
-local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
-local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
-local SaveManager  = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
-
-local Window = Library:CreateWindow({
-    Title = 'Karpa Hub',
-    Center = true,
-    AutoShow = true,
-    TabPadding = 8,
-    MenuFadeTime = 0.2,
-})
-
-local Tabs = {
-    Aimbot = Window:AddTab('Aimbot'),
-    ESP = Window:AddTab('ESP'),
-    Movement = Window:AddTab('Movement'),
-    ['UI Settings'] = Window:AddTab('UI Settings'),
-}
-
--- ============================================================
--- ABA AIMBOT
--- ============================================================
-local AimGroup = Tabs.Aimbot:AddLeftGroupbox('Aimbot')
-
-AimGroup:AddToggle('AimEnabled', {
-    Text = 'Enable Aimbot', Default = false,
-    Tooltip = 'Segure o botao direito para mirar',
-    Callback = function(v) cfg.aim_enabled = v end,
-})
-
-AimGroup:AddToggle('SilentAim', {
-    Text = 'Silent Aim', Default = true,
-    Callback = function(v) cfg.silent = v end,
-})
-
-AimGroup:AddSlider('AimFOV', {
-    Text = 'FOV', Default = 120, Min = 20, Max = 500, Rounding = 0,
-    Callback = function(v) cfg.fov = v end,
-})
-
-AimGroup:AddToggle('FOVVisible', {
-    Text = 'Show FOV Circle', Default = false,
-    Tooltip = 'Desenha o circulo do FOV na tela',
-    Callback = function(v) cfg.fov_visible = v end,
-})
-
-AimGroup:AddToggle('VisibleCheck', {
-    Text = 'Visible Check', Default = true,
-    Tooltip = 'So mira se tiver linha de visao',
-    Callback = function(v) cfg.visible_check = v end,
-})
-
-AimGroup:AddToggle('ForceAim', {
-    Text = 'Force Aim', Default = true,
-    Tooltip = 'Reescreve a mira pra brigar com o jogo',
-    Callback = function(v) cfg.force_aim = v end,
-})
-
-AimGroup:AddDropdown('HitboxSelect', {
-    Text = 'Hitbox',
-    Values = { 'Head', 'UpperTorso', 'LowerTorso', 'HumanoidRootPart' },
-    Default = 1,
-    Callback = function(v) cfg.hitbox = v end,
-})
-
-AimGroup:AddSlider('Prediction', {
-    Text = 'Prediction (x100)', Default = 15, Min = 0, Max = 100, Rounding = 0,
-    Callback = function(v) cfg.prediction = v / 100 end,
-})
-
--- ============================================================
--- ABA ESP
--- ============================================================
-local EspGroup = Tabs.ESP:AddLeftGroupbox('ESP Elements')
-
-EspGroup:AddToggle('EspBox', {
-    Text = 'ESP Box', Default = false,
-    Tooltip = 'Caixa em volta do player',
-    Callback = function(v) cfg.esp_box = v end,
-})
-
-EspGroup:AddToggle('EspSkeleton', {
-    Text = 'ESP Skeleton', Default = false,
-    Tooltip = 'Linhas em cada osso, acompanha animacao',
-    Callback = function(v) cfg.esp_skeleton = v end,
-})
-
-EspGroup:AddToggle('EspName', {
-    Text = 'ESP Name', Default = false,
-    Callback = function(v) cfg.esp_name = v end,
-})
-
-EspGroup:AddToggle('EspDisplay', {
-    Text = 'ESP Display Name', Default = false,
-    Callback = function(v) cfg.esp_display = v end,
-})
-
-EspGroup:AddToggle('EspHealth', {
-    Text = 'ESP Health', Default = false,
-    Callback = function(v) cfg.esp_health = v end,
-})
-
-EspGroup:AddToggle('EspDistance', {
-    Text = 'ESP Distance', Default = false,
-    Callback = function(v) cfg.esp_distance = v end,
-})
-
-EspGroup:AddToggle('EspWeapon', {
-    Text = 'ESP Weapon', Default = false,
-    Tooltip = 'Nome da Tool equipada',
-    Callback = function(v) cfg.esp_weapon = v end,
-})
-
-EspGroup:AddToggle('EspInventory', {
-    Text = 'ESP Inventory', Default = false,
-    Tooltip = 'Itens da mao e da mochila',
-    Callback = function(v) cfg.esp_inventory = v end,
-})
-
-EspGroup:AddToggle('EspLine', {
-    Text = 'ESP Line', Default = false,
-    Tooltip = 'Linha do topo da tela ate o player',
-    Callback = function(v) cfg.esp_line = v end,
-})
-
-EspGroup:AddDropdown('LineOrigin', {
-    Text = 'Line Origin',
-    Values = { 'top', 'bottom', 'center' },
-    Default = 1,
-    Callback = function(v) cfg.esp_line_origin = v end,
-})
-
--- ============================================================
--- ABA MOVEMENT
--- ============================================================
-local MoveGroup = Tabs.Movement:AddLeftGroupbox('Movement')
-
-MoveGroup:AddToggle('SpeedEnabled', {
-    Text = 'Speed', Default = false,
-    Callback = function(v) cfg.speed_enabled = v end,
-})
-
-MoveGroup:AddSlider('WalkSpeed', {
-    Text = 'Walk Speed', Default = 16, Min = 16, Max = 250, Rounding = 0,
-    Callback = function(v)
-        cfg.speed = v
-        cfg.speed_enabled = true
-    end,
-})
-
-MoveGroup:AddToggle('JumpEnabled', {
-    Text = 'Jump Power', Default = false,
-    Callback = function(v) cfg.jump_enabled = v end,
-})
-
-MoveGroup:AddSlider('JumpPower', {
-    Text = 'Jump Power Value', Default = 50, Min = 16, Max = 250, Rounding = 0,
-    Callback = function(v)
-        cfg.jump_power = v
-        cfg.jump_enabled = true
-    end,
-})
-
-MoveGroup:AddToggle('InfiniteJump', {
-    Text = 'Infinite Jump', Default = false,
-    Callback = function(v) cfg.infinite_jump = v end,
-})
-
-MoveGroup:AddToggle('FlyEnabled', {
-    Text = 'Fly', Default = false,
-    Callback = function(v) cfg.fly = v end,
-})
-
-MoveGroup:AddSlider('FlySpeed', {
-    Text = 'Fly Speed', Default = 50, Min = 16, Max = 250, Rounding = 0,
-    Callback = function(v) cfg.fly_speed = v end,
-})
-
-MoveGroup:AddToggle('FreezeAnims', {
-    Text = 'Freeze Anims', Default = false,
-    Tooltip = 'Congela animacoes mas voce continua andando',
-    Callback = function(v)
-        cfg.freeze_anims = v
-        if not v then restore_anims() end
-    end,
-})
-
--- ============================================================
--- UI SETTINGS
--- ============================================================
-local MenuGroup = Tabs['UI Settings']:AddLeftGroupbox('Menu')
-
-MenuGroup:AddButton('Unload', function()
-    Library:Unload()
-end)
-
-MenuGroup:AddLabel('Menu keybind'):AddKeyPicker('MenuKeybind', {
-    Default = 'RightShift',
-    NoUI = true,
-    Text = 'Menu keybind',
-})
-
-Library.ToggleKeybind = Options.MenuKeybind
-
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ 'MenuKeybind' })
-ThemeManager:SetFolder('KarpaHub')
-SaveManager:SetFolder('KarpaHub')
-SaveManager:BuildConfigSection(Tabs['UI Settings'])
-ThemeManager:ApplyToTab(Tabs['UI Settings'])
-SaveManager:LoadAutoloadConfig()
+K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}
