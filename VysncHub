@@ -107,6 +107,7 @@ local function hide(o)
     o.distance.Visible=false; o.weapon.Visible=false; o.inventory.Visible=false
     for _,l in ipairs(o.skeleton) do l.Visible=false end
 end
+
 function K.update_esp()
     local ss=Camera.ViewportSize
     local top=Vector2.new(ss.X/2,0)
@@ -339,3 +340,69 @@ function K.update_misc(dt)
 end
 
 K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}
+local repo='https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
+local Library=loadstring(game:HttpGet(repo..'Library.lua'))()
+local TM=loadstring(game:HttpGet(repo..'addons/ThemeManager.lua'))()
+local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
+
+local W=Library:CreateWindow({Title='Karpa Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
+local T={Aimbot=W:AddTab('Aimbot'),ESP=W:AddTab('ESP'),Movement=W:AddTab('Movement'),Misc=W:AddTab('Misc'),['UI Settings']=W:AddTab('UI Settings')}
+
+local function bk(tg,name,txt)
+    tg:AddKeyPicker(name,{Default='None',SyncToggleState=true,Mode='Toggle',Text=txt or name,NoUI=false})
+end
+
+local AG=T.Aimbot:AddLeftGroupbox('Aimbot')
+local tAim=AG:AddToggle('AimEnabled',{Text='Enable Aimbot',Default=false,Callback=function(v) cfg.aim_enabled=v end})
+bk(tAim,'AimKey','Aimbot')
+AG:AddToggle('AimHideClick',{Text='Hide Click (segurar botao direito)',Default=false,Callback=function(v) cfg.aim_hide_click=v end})
+AG:AddToggle('SilentAim',{Text='Silent Aim',Default=true,Callback=function(v) cfg.silent=v end})
+AG:AddSlider('AimFOV',{Text='FOV',Default=120,Min=20,Max=500,Rounding=0,Callback=function(v) cfg.fov=v end})
+local tFov=AG:AddToggle('FOVVisible',{Text='Show FOV Circle',Default=false,Callback=function(v) cfg.fov_visible=v end})
+bk(tFov,'FovKey','FOV Circle')
+AG:AddToggle('VisibleCheck',{Text='Visible Check',Default=true,Callback=function(v) cfg.visible_check=v end})
+AG:AddToggle('ForceAim',{Text='Force Aim',Default=true,Callback=function(v) cfg.force_aim=v end})
+AG:AddDropdown('HitboxSelect',{Text='Hitbox',Values={'Head','UpperTorso','LowerTorso','HumanoidRootPart'},Default=1,Callback=function(v) cfg.hitbox=v end})
+AG:AddSlider('Prediction',{Text='Prediction (x100)',Default=15,Min=0,Max=100,Rounding=0,Callback=function(v) cfg.prediction=v/100 end})
+
+local EG=T.ESP:AddLeftGroupbox('ESP')
+local tBox=EG:AddToggle('EspBox',{Text='ESP Box',Default=false,Callback=function(v) cfg.esp_box=v end}); bk(tBox,'BoxKey','ESP Box')
+local tSk=EG:AddToggle('EspSkeleton',{Text='ESP Skeleton',Default=false,Callback=function(v) cfg.esp_skeleton=v end}); bk(tSk,'SkKey','Skeleton')
+local tNm=EG:AddToggle('EspName',{Text='ESP Name',Default=false,Callback=function(v) cfg.esp_name=v end}); bk(tNm,'NmKey','Name')
+local tDp=EG:AddToggle('EspDisplay',{Text='ESP Display Name',Default=false,Callback=function(v) cfg.esp_display=v end}); bk(tDp,'DpKey','Display')
+local tHp=EG:AddToggle('EspHealth',{Text='ESP Health Bar',Default=false,Callback=function(v) cfg.esp_health=v end}); bk(tHp,'HpKey','Health')
+local tDs=EG:AddToggle('EspDistance',{Text='ESP Distance',Default=false,Callback=function(v) cfg.esp_distance=v end}); bk(tDs,'DsKey','Distance')
+local tWp=EG:AddToggle('EspWeapon',{Text='ESP Weapon',Default=false,Callback=function(v) cfg.esp_weapon=v end}); bk(tWp,'WpKey','Weapon')
+local tIv=EG:AddToggle('EspInventory',{Text='ESP Inventory',Default=false,Callback=function(v) cfg.esp_inventory=v end}); bk(tIv,'IvKey','Inventory')
+local tLn=EG:AddToggle('EspLine',{Text='ESP Line',Default=false,Callback=function(v) cfg.esp_line=v end}); bk(tLn,'LnKey','ESP Line')
+EG:AddDropdown('LineOrigin',{Text='Line Origin',Values={'top','bottom','center'},Default=1,Callback=function(v) cfg.esp_line_origin=v end})
+
+local MG=T.Movement:AddLeftGroupbox('Movement')
+local tSp=MG:AddToggle('SpeedEnabled',{Text='Speed',Default=false,Callback=function(v) cfg.speed_enabled=v end}); bk(tSp,'SpKey','Speed')
+MG:AddSlider('WalkSpeed',{Text='Walk Speed',Default=16,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.speed=v; cfg.speed_enabled=true end})
+local tJp=MG:AddToggle('JumpEnabled',{Text='Jump Power',Default=false,Callback=function(v) cfg.jump_enabled=v end}); bk(tJp,'JpKey','Jump')
+MG:AddSlider('JumpPower',{Text='Jump Power Value',Default=50,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.jump_power=v; cfg.jump_enabled=true end})
+local tIj=MG:AddToggle('InfiniteJump',{Text='Infinite Jump',Default=false,Callback=function(v) cfg.infinite_jump=v end}); bk(tIj,'IjKey','Infinite Jump')
+local tFl=MG:AddToggle('FlyEnabled',{Text='Fly',Default=false,Callback=function(v) cfg.fly=v end}); bk(tFl,'FlKey','Fly')
+MG:AddSlider('FlySpeed',{Text='Fly Speed',Default=50,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.fly_speed=v end})
+
+local MiG=T.Misc:AddLeftGroupbox('Misc')
+local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
+local tSb=MiG:AddToggle('Spinbot',{Text='Spinbot',Default=false,Callback=function(v) cfg.spinbot=v end}); bk(tSb,'SbKey','Spinbot')
+MiG:AddSlider('SpinSpeed',{Text='Spin Speed',Default=360,Min=30,Max=2000,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
+
+local MenuG=T['UI Settings']:AddLeftGroupbox('Menu')
+MenuG:AddButton('Unload',function() Library:Unload() end)
+MenuG:AddLabel('Menu keybind'):AddKeyPicker('MenuKeybind',{Default='RightShift',NoUI=true,Text='Menu keybind'})
+Library.ToggleKeybind=Options.MenuKeybind
+
+TM:SetLibrary(Library); SM:SetLibrary(Library)
+SM:IgnoreThemeSettings(); SM:SetIgnoreIndexes({'MenuKeybind'})
+TM:SetFolder('KarpaHub'); SM:SetFolder('KarpaHub')
+SM:BuildConfigSection(T['UI Settings'])
+TM:ApplyToTab(T['UI Settings'])
+SM:LoadAutoloadConfig()
+
+RunService.RenderStepped:Connect(function(dt)
+    K.update_esp(); K.update_aim(); K.update_movement(); K.update_misc(dt)
+end)
