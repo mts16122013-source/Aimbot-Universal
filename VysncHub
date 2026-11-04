@@ -9,7 +9,7 @@ local K = getgenv().karpa or {}
 getgenv().karpa = K
 
 K.cfg = {
-    aim_enabled=false, silent=true, fov=120, fov_visible=false,
+    aim_enabled=false, aim_hide_click=false, silent=true, fov=120, fov_visible=false,
     visible_check=true, force_aim=true, prediction=0, smoothness=25, hitbox="Head",
     team_check=false, dead_check=true,
     esp_line=false, esp_line_origin="top", esp_skeleton=false, esp_box=false,
@@ -19,8 +19,7 @@ K.cfg = {
     jump_power=50, jump_enabled=false, infinite_jump=false, fly=false, fly_speed=50, noclip=false,
     freeze_anims=false, spinbot=false, spin_speed=360, fullbright=false,
     grab_car=false,
-    -- TROCA O ID DA ANIMAÇÃO AQUI EMBAIXO (Mantém o rbxassetid://)
-    eat_anim_id="rbxassetid://0000000000", 
+    eat_anim_id="rbxassetid://0000000000",
 }
 local cfg = K.cfg
 
@@ -225,6 +224,15 @@ fovc.Thickness=1; fovc.NumSides=64
 fovc.Color=Color3.fromRGB(255,255,255); fovc.Transparency=0.5; fovc.Filled=false; fovc.Visible=false
 K.fov_circle=fovc
 
+-- LÓGICA DO BOTÃO DIREITO
+local rmb_down = false
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then rmb_down = true end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then rmb_down = false end
+end)
+
 local function vis(part)
     if not cfg.visible_check then return true end
     local o=Camera.CFrame.Position
@@ -282,6 +290,10 @@ function K.update_aim()
         K.fov_circle.Visible=false
     end
     if not cfg.aim_enabled then return end
+    
+    -- VERIFICAÇÃO DO HIDE CLICK
+    if cfg.aim_hide_click and not rmb_down then return end
+    
     local t=target()
     if t then aim(t) end
 end
@@ -541,8 +553,10 @@ local function bk(tg,name,txt)
 end
 
 local AG=MainTab:AddLeftGroupbox('Aimbot')
-local tAim=AG:AddToggle('AimEnabled',{Text='Enable Aimbot',Default=false,Tooltip='Gruda automaticamente ao entrar no FOV',Callback=function(v) cfg.aim_enabled=v end})
+local tAim=AG:AddToggle('AimEnabled',{Text='Enable Aimbot',Default=false,Callback=function(v) cfg.aim_enabled=v end})
 bk(tAim,'AimKey','Aimbot')
+local tHide = AG:AddToggle('HideClick',{Text='Hide Click (Hold RMB)',Default=false,Tooltip='Se ligado, so puxa segurando o botao direito',Callback=function(v) cfg.aim_hide_click=v end})
+bk(tHide,'HideClickKey','Hide Click')
 AG:AddToggle('VisibleCheck',{Text='Visible Check',Default=true,Callback=function(v) cfg.visible_check=v end})
 AG:AddToggle('TeamCheck',{Text='Team Check',Default=false,Callback=function(v) cfg.team_check=v end})
 AG:AddToggle('DeadCheck',{Text='Dead Check',Default=true,Tooltip='Nao puxa em quem ta morto',Callback=function(v) cfg.dead_check=v end})
