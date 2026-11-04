@@ -19,6 +19,7 @@ K.cfg = {
     jump_power=50, jump_enabled=false, infinite_jump=false, fly=false, fly_speed=50, noclip=false,
     freeze_anims=false, spinbot=false, spin_speed=360, fullbright=false,
     grab_car=false,
+    eat_anim_id="rbxassetid://0000000000", -- Coloca o ID do bang do Infinity Weld aqui
 }
 local cfg = K.cfg
 
@@ -298,6 +299,33 @@ function K.uncuff()
     if hum then hum.WalkSpeed = 16; hum.JumpPower = 50 end
 end
 
+-- COMER PLAYER (BANG)
+local eat_track = nil
+function K.toggle_eat(state)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then return end
+
+    if state then
+        if not eat_track then
+            local anim = Instance.new("Animation")
+            anim.AnimationId = cfg.eat_anim_id
+            eat_track = animator:LoadAnimation(anim)
+        end
+        eat_track.Looped = true
+        eat_track:Play()
+    else
+        if eat_track then
+            eat_track:Stop()
+            eat_track = nil
+        end
+    end
+end
+
+-- PEGAR CARRO
 local held_car = nil
 local car_pos = nil
 local car_vel = nil
@@ -323,13 +351,11 @@ local function draw_car_prompt()
         if K.car_text then K.car_text:Remove() K.car_text = nil end
         return
     end
-    
     local car = get_closest_car()
     if not car then
         if K.car_text then K.car_text.Visible = false end
         return
     end
-    
     if not K.car_text then
         K.car_text = Drawing.new("Text")
         K.car_text.Size = 16
@@ -337,7 +363,6 @@ local function draw_car_prompt()
         K.car_text.Outline = true
         K.car_text.Color = Color3.fromRGB(255, 255, 0)
     end
-    
     local pos, on_screen = Camera:WorldToViewportPoint(car.PrimaryPart.Position + Vector3.new(0, 3, 0))
     if on_screen then
         K.car_text.Text = "[Y] Puxar Carro"
@@ -540,10 +565,21 @@ EG:AddToggle('EspInventory',{Text='ESP Inventory',Default=false,Callback=functio
 EG:AddToggle('EspLine',{Text='ESP Line',Default=false,Callback=function(v) cfg.esp_line=v end})
 EG:AddDropdown('LineOrigin',{Text='Line Origin',Values={'top','bottom','center'},Default=1,Callback=function(v) cfg.esp_line_origin=v end})
 
--- ABA EXPLOIT AQUI
 local XG=ExploitTab:AddLeftGroupbox('Exploits')
 XG:AddButton('Desalgemar', function() K.uncuff() end)
 XG:AddToggle('GrabCar',{Text='Pegar/Jogar Carro (Y)',Default=false,Callback=function(v) cfg.grab_car=v end})
+local tEat = XG:AddToggle('EatPlayer',{Text='Comer Player (Bang)',Default=false,Callback=function(v) K.toggle_eat(v) end})
+XG:AddTextbox('EatAnimId',{
+    Text = 'ID da Animação',
+    Default = 'rbxassetid://0000000000',
+    Numeric = false,
+    Finished = false,
+    ClearOnFocus = false,
+    Callback = function(text) 
+        cfg.eat_anim_id = text 
+        if eat_track then eat_track:Stop() eat_track = nil end
+    end
+})
 
 local MiG=ExploitTab:AddRightGroupbox('Misc')
 local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
