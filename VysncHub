@@ -506,6 +506,7 @@ local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
 
 local W=Library:CreateWindow({Title='Karpa Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
 local MainTab=W:AddTab('Main')
+local ExploitTab=W:AddTab('Exploit')
 local MovementTab=W:AddTab('Movement')
 local SettingsTab=W:AddTab('Settings')
 
@@ -539,13 +540,16 @@ EG:AddToggle('EspInventory',{Text='ESP Inventory',Default=false,Callback=functio
 EG:AddToggle('EspLine',{Text='ESP Line',Default=false,Callback=function(v) cfg.esp_line=v end})
 EG:AddDropdown('LineOrigin',{Text='Line Origin',Values={'top','bottom','center'},Default=1,Callback=function(v) cfg.esp_line_origin=v end})
 
-local MiG=MainTab:AddRightGroupbox('Misc')
+-- ABA EXPLOIT AQUI
+local XG=ExploitTab:AddLeftGroupbox('Exploits')
+XG:AddButton('Desalgemar', function() K.uncuff() end)
+XG:AddToggle('GrabCar',{Text='Pegar/Jogar Carro (Y)',Default=false,Callback=function(v) cfg.grab_car=v end})
+
+local MiG=ExploitTab:AddRightGroupbox('Misc')
 local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
 local tSb=MiG:AddToggle('Spinbot',{Text='Spinbot',Default=false,Callback=function(v) cfg.spinbot=v end}); bk(tSb,'SbKey','Spinbot')
 MiG:AddSlider('SpinSpeed',{Text='Spin Speed',Default=360,Min=30,Max=2000,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
 local tFb=MiG:AddToggle('Fullbright',{Text='Fullbright',Default=false,Callback=function(v) cfg.fullbright=v end}); bk(tFb,'FbKey','Fullbright')
-MiG:AddButton('Desalgemar', function() K.uncuff() end)
-local tCar=MiG:AddToggle('GrabCar',{Text='Pegar/Jogar Carro (Y)',Default=false,Callback=function(v) cfg.grab_car=v end})
 
 local PG=MovementTab:AddLeftGroupbox('Movement')
 local tBypass=PG:AddToggle('SpeedBypassEnabled',{Text='Speed Bypass (TP Walk)',Default=false,Callback=function(v) cfg.speed_bypass_enabled=v end}); bk(tBypass,'SpKey','Speed Bypass')
