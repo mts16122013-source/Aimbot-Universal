@@ -9,25 +9,17 @@ local K = getgenv().karpa or {}
 getgenv().karpa = K
 
 K.cfg = {
-    aim_enabled=false, aim_hide_click=true, silent=true, fov=120, fov_visible=false,
+    aim_enabled=false, silent=true, fov=120, fov_visible=false,
     visible_check=true, force_aim=true, prediction=0, smoothness=25, hitbox="Head",
-    aim_key=Enum.UserInputType.MouseButton2, team_check=false,
+    team_check=false, dead_check=true,
     esp_line=false, esp_line_origin="top", esp_skeleton=false, esp_box=false,
     esp_health=false, esp_name=false, esp_display=false, esp_weapon=false,
     esp_distance=false, esp_inventory=false,
-    speed=16, speed_enabled=false, jump_power=50, jump_enabled=false,
-    infinite_jump=false, fly=false, fly_speed=50, noclip=false,
+    speed_bypass_enabled=false, speed_bypass_val=60,
+    jump_power=50, jump_enabled=false, infinite_jump=false, fly=false, fly_speed=50, noclip=false,
     freeze_anims=false, spinbot=false, spin_speed=360, fullbright=false,
 }
 local cfg = K.cfg
-
-local rmb_down = false
-UserInputService.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then rmb_down = true end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then rmb_down = false end
-end)
 
 K.esp_objects = {}
 local esp_objects = K.esp_objects
@@ -50,26 +42,16 @@ function K.remove_esp(player)
 end
 
 function K.remove_all_esp()
-    for player in pairs(esp_objects) do
-        K.remove_esp(player)
-    end
+    for player in pairs(esp_objects) do K.remove_esp(player) end
 end
 
 function K.cleanup_drawings()
     K.remove_all_esp()
-    if K.fov_circle then
-        K.fov_circle:Remove()
-        K.fov_circle = nil
-    end
+    if K.fov_circle then K.fov_circle:Remove() K.fov_circle = nil end
 end
 
-Players.PlayerRemoving:Connect(function(p)
-    K.remove_esp(p)
-end)
-
-LocalPlayer.CharacterRemoving:Connect(function()
-    K.remove_all_esp()
-end)
+Players.PlayerRemoving:Connect(function(p) K.remove_esp(p) end)
+LocalPlayer.CharacterRemoving:Connect(function() K.remove_all_esp() end)
 
 local function create_esp(player)
     if player==LocalPlayer or esp_objects[player] then return end
@@ -88,12 +70,16 @@ local function create_esp(player)
     esp_objects[player]=o
 end
 
-local skel={
+local skel_r15={
     {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"LowerTorso","HumanoidRootPart"},
     {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
     {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
     {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
     {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+}
+local skel_r6={
+    {"Head","Torso"},{"Torso","Left Arm"},{"Torso","Right Arm"},
+    {"Torso","Left Leg"},{"Torso","Right Leg"}
 }
 
 local function equipped(c)
@@ -114,14 +100,23 @@ local function inv(p,c)
 end
 
 local function fullbox(c,head)
-    local hp,hon=Camera:WorldToViewportPoint(head.Position+Vector3.new(0,0.7,0))
+    local hp,hon=Camera:WorldToViewportPoint(head.Position+Vector3.new(0,0.5,0))
     if not hon then return nil end
     local fs=nil
+    -- Tenta R15
     for _,n in ipairs({"LeftFoot","RightFoot","LeftLowerLeg","RightLowerLeg"}) do
         local pt=c:FindFirstChild(n)
         if pt and pt:IsA("BasePart") then
             local p,on=Camera:WorldToViewportPoint(pt.Position)
             if on and (not fs or p.Y>fs.Y) then fs=p end
+        end
+    end
+    -- Fallback R6 ou HRP
+    if not fs then
+        local hrp = c:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local p,on=Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0,2,0))
+            if on then fs=p end
         end
     end
     if not fs then return nil end
@@ -141,9 +136,7 @@ end
 
 function K.update_esp()
     for player in pairs(esp_objects) do
-        if not player.Parent then
-            K.remove_esp(player)
-        end
+        if not player.Parent then K.remove_esp(player) end
     end
 
     local ss=Camera.ViewportSize
@@ -218,6 +211,7 @@ function K.update_esp()
             else o.inventory.Visible=false end
         else o.inventory.Visible=false end
         if cfg.esp_skeleton then
+            local skel = c:FindFirstChild("UpperTorso") and skel_r15 or skel_r6
             local i=1
             for _,cn in ipairs(skel) do
                 local p1=c:FindFirstChild(cn[1]); local p2=c:FindFirstChild(cn[2])
@@ -265,7 +259,8 @@ local function target()
         local pt=c:FindFirstChild(cfg.hitbox)
         if not pt or not pt:IsA("BasePart") then continue end
         local h=c:FindFirstChildOfClass("Humanoid")
-        if not h or h.Health<=0 then continue end
+        if not h then continue end
+        if cfg.dead_check and h.Health<=0 then continue end
         local pos,on=Camera:WorldToViewportPoint(pt.Position)
         if not on then continue end
         local d=(Vector2.new(pos.X,pos.Y)-ce).Magnitude
@@ -297,30 +292,40 @@ function K.update_aim()
         K.fov_circle.Visible=false
     end
     if not cfg.aim_enabled then return end
-    if cfg.aim_hide_click then
-        local held = rmb_down or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-        if not held then return end
-    end
     local t=target()
     if t then aim(t) end
 end
 
 local fly=nil
-function K.update_movement()
+function K.update_movement(dt)
     local c=LocalPlayer.Character
     if not c then return end
     local h=c:FindFirstChildOfClass("Humanoid")
     if not h then return end
-    h.WalkSpeed=cfg.speed_enabled and cfg.speed or 16
+    
+    -- WalkSpeed bypass via TP Walk (Nudge CFrame)
+    if cfg.speed_bypass_enabled then
+        h.WalkSpeed = 16 -- Mantem o padrao para nao detectar
+        if h.MoveDirection.Magnitude > 0 then
+            local hrp = c:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                -- Move o HRP suavemente baseado na direcao e no slider
+                local move = h.MoveDirection * cfg.speed_bypass_val * dt
+                hrp.CFrame = hrp.CFrame + move
+            end
+        end
+    else
+        h.WalkSpeed = 16
+    end
+
     if cfg.jump_enabled then h.UseJumpPower=true; h.JumpPower=cfg.jump_power
     else h.JumpPower=50 end
     for _,p in ipairs(c:GetDescendants()) do
-        if p:IsA("BasePart") and p.Name~="HumanoidRootPart" then
-            p.CanCollide = not cfg.noclip
-        end
+        if p:IsA("BasePart") and p.Name~="HumanoidRootPart" then p.CanCollide = not cfg.noclip end
     end
     local hrp=c:FindFirstChild("HumanoidRootPart")
     if hrp then hrp.CanCollide = not cfg.noclip end
+    
     if not hrp or not cfg.fly then
         if fly then fly:Destroy() fly=nil end
         return
@@ -409,13 +414,11 @@ function K.update_misc(dt)
     spin_av.AngularVelocity=Vector3.new(0,math.rad(spd),0)
 end
 
-K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}
-local repo='https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
+K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}local repo='https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
 local Library=loadstring(game:HttpGet(repo..'Library.lua'))()
 local TM=loadstring(game:HttpGet(repo..'addons/ThemeManager.lua'))()
 local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
 
--- tema roxo
 Library.AccentColor     = Color3.fromRGB(160, 80, 255)
 Library.AccentColorDark = Color3.fromRGB(110, 50, 200)
 Library.MainColor       = Color3.fromRGB(24, 16, 38)
@@ -432,40 +435,40 @@ local function bk(tg,name,txt)
 end
 
 local AG=MainTab:AddLeftGroupbox('Aimbot')
-local tAim=AG:AddToggle('AimEnabled',{Text='Enable Aimbot',Default=false,Callback=function(v) cfg.aim_enabled=v end})
+local tAim=AG:AddToggle('AimEnabled',{Text='Enable Aimbot',Default=false,Tooltip='Gruda automaticamente ao entrar no FOV',Callback=function(v) cfg.aim_enabled=v end})
 bk(tAim,'AimKey','Aimbot')
-AG:AddToggle('AimHideClick',{Text='Hold RMB (segurar botao direito)',Default=true,Tooltip='Se ligado so puxa segurando o botao direito',Callback=function(v) cfg.aim_hide_click=v end})
+AG:AddToggle('VisibleCheck',{Text='Visible Check',Default=true,Callback=function(v) cfg.visible_check=v end})
 AG:AddToggle('TeamCheck',{Text='Team Check',Default=false,Callback=function(v) cfg.team_check=v end})
+AG:AddToggle('DeadCheck',{Text='Dead Check',Default=true,Tooltip='Nao puxa em quem ta morto',Callback=function(v) cfg.dead_check=v end})
 AG:AddSlider('AimFOV',{Text='FOV',Default=120,Min=20,Max=500,Rounding=0,Callback=function(v) cfg.fov=v end})
 local tFov=AG:AddToggle('FOVVisible',{Text='Show FOV Circle',Default=false,Callback=function(v) cfg.fov_visible=v end})
 bk(tFov,'FovKey','FOV Circle')
 AG:AddSlider('Smoothness',{Text='Smoothness (1=rapido)',Default=25,Min=1,Max=100,Rounding=0,Callback=function(v) cfg.smoothness=v end})
 AG:AddSlider('Prediction',{Text='Prediction (x100)',Default=0,Min=0,Max=100,Rounding=0,Callback=function(v) cfg.prediction=v/100 end})
 AG:AddDropdown('HitboxSelect',{Text='Hitbox',Values={'Head','UpperTorso','LowerTorso','HumanoidRootPart'},Default=1,Callback=function(v) cfg.hitbox=v end})
-AG:AddToggle('VisibleCheck',{Text='Visible Check',Default=true,Callback=function(v) cfg.visible_check=v end})
 AG:AddToggle('ForceAim',{Text='Force Aim',Default=true,Callback=function(v) cfg.force_aim=v end})
 
 local EG=MainTab:AddRightGroupbox('ESP')
-local tBox=EG:AddToggle('EspBox',{Text='ESP Box',Default=false,Callback=function(v) cfg.esp_box=v end}); bk(tBox,'BoxKey','ESP Box')
-local tSk=EG:AddToggle('EspSkeleton',{Text='ESP Skeleton',Default=false,Callback=function(v) cfg.esp_skeleton=v end}); bk(tSk,'SkKey','Skeleton')
-local tNm=EG:AddToggle('EspName',{Text='ESP Name',Default=false,Callback=function(v) cfg.esp_name=v end}); bk(tNm,'NmKey','Name')
-local tDp=EG:AddToggle('EspDisplay',{Text='ESP Display Name',Default=false,Callback=function(v) cfg.esp_display=v end}); bk(tDp,'DpKey','Display')
-local tHp=EG:AddToggle('EspHealth',{Text='ESP Health Bar',Default=false,Callback=function(v) cfg.esp_health=v end}); bk(tHp,'HpKey','Health')
-local tDs=EG:AddToggle('EspDistance',{Text='ESP Distance',Default=false,Callback=function(v) cfg.esp_distance=v end}); bk(tDs,'DsKey','Distance')
-local tWp=EG:AddToggle('EspWeapon',{Text='ESP Weapon',Default=false,Callback=function(v) cfg.esp_weapon=v end}); bk(tWp,'WpKey','Weapon')
-local tIv=EG:AddToggle('EspInventory',{Text='ESP Inventory',Default=false,Callback=function(v) cfg.esp_inventory=v end}); bk(tIv,'IvKey','Inventory')
-local tLn=EG:AddToggle('EspLine',{Text='ESP Line',Default=false,Callback=function(v) cfg.esp_line=v end}); bk(tLn,'LnKey','ESP Line')
+EG:AddToggle('EspBox',{Text='ESP Box',Default=false,Callback=function(v) cfg.esp_box=v end})
+EG:AddToggle('EspSkeleton',{Text='ESP Skeleton',Default=false,Callback=function(v) cfg.esp_skeleton=v end})
+EG:AddToggle('EspName',{Text='ESP Name',Default=false,Callback=function(v) cfg.esp_name=v end})
+EG:AddToggle('EspDisplay',{Text='ESP Display Name',Default=false,Callback=function(v) cfg.esp_display=v end})
+EG:AddToggle('EspHealth',{Text='ESP Health Bar',Default=false,Callback=function(v) cfg.esp_health=v end})
+EG:AddToggle('EspDistance',{Text='ESP Distance',Default=false,Callback=function(v) cfg.esp_distance=v end})
+EG:AddToggle('EspWeapon',{Text='ESP Weapon',Default=false,Callback=function(v) cfg.esp_weapon=v end})
+EG:AddToggle('EspInventory',{Text='ESP Inventory',Default=false,Callback=function(v) cfg.esp_inventory=v end})
+EG:AddToggle('EspLine',{Text='ESP Line',Default=false,Callback=function(v) cfg.esp_line=v end})
 EG:AddDropdown('LineOrigin',{Text='Line Origin',Values={'top','bottom','center'},Default=1,Callback=function(v) cfg.esp_line_origin=v end})
 
 local MiG=MainTab:AddRightGroupbox('Misc')
 local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
 local tSb=MiG:AddToggle('Spinbot',{Text='Spinbot',Default=false,Callback=function(v) cfg.spinbot=v end}); bk(tSb,'SbKey','Spinbot')
-MiG:AddSlider('SpinSpeed',{Text='Spin Speed (graus/seg)',Default=360,Min=30,Max=2000,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
+MiG:AddSlider('SpinSpeed',{Text='Spin Speed',Default=360,Min=30,Max=2000,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
 local tFb=MiG:AddToggle('Fullbright',{Text='Fullbright',Default=false,Callback=function(v) cfg.fullbright=v end}); bk(tFb,'FbKey','Fullbright')
 
 local PG=MovementTab:AddLeftGroupbox('Movement')
-local tSp=PG:AddToggle('SpeedEnabled',{Text='Speed',Default=false,Callback=function(v) cfg.speed_enabled=v end}); bk(tSp,'SpKey','Speed')
-PG:AddSlider('WalkSpeed',{Text='Walk Speed',Default=16,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.speed=v; cfg.speed_enabled=true end})
+local tBypass=PG:AddToggle('SpeedBypassEnabled',{Text='Speed Bypass (TP Walk)',Default=false,Callback=function(v) cfg.speed_bypass_enabled=v end}); bk(tBypass,'SpKey','Speed Bypass')
+PG:AddSlider('SpeedBypassVal',{Text='Speed (Studs/Sec)',Default=60,Min=16,Max=300,Rounding=0,Callback=function(v) cfg.speed_bypass_val=v end})
 local tJp=PG:AddToggle('JumpEnabled',{Text='Jump Power',Default=false,Callback=function(v) cfg.jump_enabled=v end}); bk(tJp,'JpKey','Jump')
 PG:AddSlider('JumpPower',{Text='Jump Power Value',Default=50,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.jump_power=v; cfg.jump_enabled=true end})
 local tIj=PG:AddToggle('InfiniteJump',{Text='Infinite Jump',Default=false,Callback=function(v) cfg.infinite_jump=v end}); bk(tIj,'IjKey','Infinite Jump')
@@ -489,5 +492,5 @@ TM:ApplyToTab(SettingsTab)
 SM:LoadAutoloadConfig()
 
 RunService.RenderStepped:Connect(function(dt)
-    K.update_esp(); K.update_aim(); K.update_movement(); K.update_misc(dt)
+    K.update_esp(); K.update_aim(); K.update_movement(dt); K.update_misc(dt)
 end)
