@@ -331,10 +331,10 @@ end
 
 function K.toggle_grab_car()
     if held_car then
-        -- Jogar o carro
+        -- Jogar Carro
         if car_pos then car_pos:Destroy() car_pos = nil end
         if last_car_part and last_car_part.Parent then
-            pcall(function() last_car_part:SetNetworkOwner(nil) end) -- Devolve pro server
+            pcall(function() last_car_part:SetNetworkOwner(nil) end)
             local vel = Instance.new("BodyVelocity")
             vel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
             vel.Velocity = Camera.CFrame.LookVector * 300 + Vector3.new(0, 150, 0)
@@ -344,14 +344,21 @@ function K.toggle_grab_car()
         held_car = nil
         last_car_part = nil
     else
-        -- Pegar o carro
+        -- Pegar Carro
         local car = get_closest_car()
         if car then
             local primary = car.PrimaryPart or car:FindFirstChildWhichIsA("BasePart")
             if primary then
                 held_car = car
                 last_car_part = primary
-                pcall(function() primary:SetNetworkOwner(LocalPlayer) end) -- Pega a posse da rede
+                pcall(function() primary:SetNetworkOwner(LocalPlayer) end)
+                
+                for _, v in ipairs(primary:GetChildren()) do
+                    if v:IsA("BodyPosition") or v:IsA("BodyVelocity") then
+                        v:Destroy()
+                    end
+                end
+                
                 car_pos = Instance.new("BodyPosition")
                 car_pos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                 car_pos.P = 50000
@@ -512,12 +519,9 @@ local Library=loadstring(game:HttpGet(repo..'Library.lua'))()
 local TM=loadstring(game:HttpGet(repo..'addons/ThemeManager.lua'))()
 local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
 
--- TEMA VERMELHO
+-- APENAS OS SLIDERS FICAM VERMELHOS (ACCENT COLOR)
 Library.AccentColor     = Color3.fromRGB(255, 0, 0)
 Library.AccentColorDark = Color3.fromRGB(150, 0, 0)
-Library.MainColor       = Color3.fromRGB(20, 0, 0)
-Library.BackgroundColor = Color3.fromRGB(15, 0, 0)
-Library.OutlineColor    = Color3.fromRGB(60, 0, 0)
 
 local W=Library:CreateWindow({Title='Karpa Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
 local MainTab=W:AddTab('Main')
@@ -563,11 +567,9 @@ local tCar = XG:AddKeyPicker('GrabCarBind', {
     SyncToggleState = false,
     Mode = 'Press',
     Text = 'Pegar/Jogar Carro',
-    NoUI = false,
-    Callback = function()
-        K.toggle_grab_car()
-    end
+    NoUI = false
 })
+tCar:OnClick(function() K.toggle_grab_car() end)
 
 local MiG=ExploitTab:AddRightGroupbox('Misc')
 local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
