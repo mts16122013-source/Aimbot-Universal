@@ -415,8 +415,16 @@ local Library=loadstring(game:HttpGet(repo..'Library.lua'))()
 local TM=loadstring(game:HttpGet(repo..'addons/ThemeManager.lua'))()
 local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
 
-local W=Library:CreateWindow({Title='Karpa Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
+-- tema roxo
+Library.AccentColor     = Color3.fromRGB(160, 80, 255)
+Library.AccentColorDark = Color3.fromRGB(110, 50, 200)
+Library.MainColor       = Color3.fromRGB(24, 16, 38)
+Library.BackgroundColor = Color3.fromRGB(18, 12, 30)
+Library.OutlineColor    = Color3.fromRGB(70, 40, 120)
+
+local W=Library:CreateWindow({Title='Nyxium Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
 local MainTab=W:AddTab('Main')
+local MovementTab=W:AddTab('Movement')
 local SettingsTab=W:AddTab('Settings')
 
 local function bk(tg,name,txt)
@@ -455,7 +463,7 @@ local tSb=MiG:AddToggle('Spinbot',{Text='Spinbot',Default=false,Callback=functio
 MiG:AddSlider('SpinSpeed',{Text='Spin Speed (graus/seg)',Default=360,Min=30,Max=2000,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
 local tFb=MiG:AddToggle('Fullbright',{Text='Fullbright',Default=false,Callback=function(v) cfg.fullbright=v end}); bk(tFb,'FbKey','Fullbright')
 
-local PG=SettingsTab:AddLeftGroupbox('Movement')
+local PG=MovementTab:AddLeftGroupbox('Movement')
 local tSp=PG:AddToggle('SpeedEnabled',{Text='Speed',Default=false,Callback=function(v) cfg.speed_enabled=v end}); bk(tSp,'SpKey','Speed')
 PG:AddSlider('WalkSpeed',{Text='Walk Speed',Default=16,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.speed=v; cfg.speed_enabled=true end})
 local tJp=PG:AddToggle('JumpEnabled',{Text='Jump Power',Default=false,Callback=function(v) cfg.jump_enabled=v end}); bk(tJp,'JpKey','Jump')
@@ -465,7 +473,7 @@ local tFl=PG:AddToggle('FlyEnabled',{Text='Fly',Default=false,Callback=function(
 PG:AddSlider('FlySpeed',{Text='Fly Speed',Default=50,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.fly_speed=v end})
 local tNc=PG:AddToggle('Noclip',{Text='Noclip',Default=false,Callback=function(v) cfg.noclip=v end}); bk(tNc,'NcKey','Noclip')
 
-local MenuG=SettingsTab:AddRightGroupbox('Menu')
+local MenuG=SettingsTab:AddLeftGroupbox('Menu')
 MenuG:AddButton('Unload',function()
     K.cleanup_drawings()
     Library:Unload()
@@ -475,7 +483,7 @@ Library.ToggleKeybind=Options.MenuKeybind
 
 TM:SetLibrary(Library); SM:SetLibrary(Library)
 SM:IgnoreThemeSettings(); SM:SetIgnoreIndexes({'MenuKeybind'})
-TM:SetFolder('KarpaHub'); SM:SetFolder('KarpaHub')
+TM:SetFolder('NyxiumHub'); SM:SetFolder('NyxiumHub')
 SM:BuildConfigSection(SettingsTab)
 TM:ApplyToTab(SettingsTab)
 SM:LoadAutoloadConfig()
