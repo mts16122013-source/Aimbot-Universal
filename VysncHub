@@ -18,6 +18,7 @@ K.cfg = {
     speed_bypass_enabled=false, speed_bypass_val=60,
     jump_power=50, jump_enabled=false, infinite_jump=false, fly=false, fly_speed=50, noclip=false,
     freeze_anims=false, spinbot=false, spin_speed=360, fullbright=false,
+    grab_car=false,
 }
 local cfg = K.cfg
 
@@ -299,100 +300,80 @@ end
 
 local held_car = nil
 local car_pos = nil
-local last_car_part = nil
-local car_prompt_text = Drawing.new("Text")
-
-car_prompt_text.Size = 16
-car_prompt_text.Center = true
-car_prompt_text.Outline = true
-car_prompt_text.Color = Color3.fromRGB(255, 255, 255)
-car_prompt_text.Visible = false
+local car_vel = nil
 
 local function get_closest_car()
     local closest, dist = nil, 100
-    local my_char = LocalPlayer.Character
-    local hrp = my_char and my_char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    
-    for _, v in ipairs(workspace:GetChildren()) do
-        if v:IsA("Model") and v:FindFirstChildWhichIsA("VehicleSeat") then
-            local primary = v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart")
-            if primary then
-                local d = (primary.Position - hrp.Position).Magnitude
-                if d < dist then 
-                    closest = v
-                    dist = d 
-                end
+    local my_pos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position
+    if not my_pos then return nil end
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("VehicleSeat") then
+            local model = v.Parent
+            if model and model:FindFirstChild("PrimaryPart") then
+                local d = (model.PrimaryPart.Position - my_pos).Magnitude
+                if d < dist then closest, dist = model, d end
             end
         end
     end
     return closest
 end
 
-function K.toggle_grab_car()
-    if held_car then
-        -- Jogar Carro
-        if car_pos then car_pos:Destroy() car_pos = nil end
-        if last_car_part and last_car_part.Parent then
-            pcall(function() last_car_part:SetNetworkOwner(nil) end)
-            local vel = Instance.new("BodyVelocity")
-            vel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            vel.Velocity = Camera.CFrame.LookVector * 300 + Vector3.new(0, 150, 0)
-            vel.Parent = last_car_part
-            task.delay(0.3, function() if vel then vel:Destroy() end end)
-        end
-        held_car = nil
-        last_car_part = nil
-    else
-        -- Pegar Carro
-        local car = get_closest_car()
-        if car then
-            local primary = car.PrimaryPart or car:FindFirstChildWhichIsA("BasePart")
-            if primary then
-                held_car = car
-                last_car_part = primary
-                pcall(function() primary:SetNetworkOwner(LocalPlayer) end)
-                
-                for _, v in ipairs(primary:GetChildren()) do
-                    if v:IsA("BodyPosition") or v:IsA("BodyVelocity") then
-                        v:Destroy()
-                    end
-                end
-                
-                car_pos = Instance.new("BodyPosition")
-                car_pos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                car_pos.P = 50000
-                car_pos.D = 1000
-                car_pos.Parent = primary
-            end
-        end
-    end
-end
-
-function K.update_car()
-    if held_car and car_pos then
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            car_pos.Position = hrp.Position + Vector3.new(0, 15, 0)
-        end
+local function draw_car_prompt()
+    if not cfg.grab_car then
+        if K.car_text then K.car_text:Remove() K.car_text = nil end
+        return
     end
     
     local car = get_closest_car()
-    if car and car.PrimaryPart and not held_car then
-        local pos, on_screen = Camera:WorldToViewportPoint(car.PrimaryPart.Position + Vector3.new(0, 3, 0))
-        if on_screen then
-            local key = "Y"
-            if Options and Options.GrabCarBind then key = Options.GrabCarBind.Value end
-            car_prompt_text.Text = "["..tostring(key).."] Pegar Carro"
-            car_prompt_text.Position = Vector2.new(pos.X, pos.Y)
-            car_prompt_text.Visible = true
-        else
-            car_prompt_text.Visible = false
-        end
+    if not car then
+        if K.car_text then K.car_text.Visible = false end
+        return
+    end
+    
+    if not K.car_text then
+        K.car_text = Drawing.new("Text")
+        K.car_text.Size = 16
+        K.car_text.Center = true
+        K.car_text.Outline = true
+        K.car_text.Color = Color3.fromRGB(255, 255, 0)
+    end
+    
+    local pos, on_screen = Camera:WorldToViewportPoint(car.PrimaryPart.Position + Vector3.new(0, 3, 0))
+    if on_screen then
+        K.car_text.Text = "[Y] Puxar Carro"
+        K.car_text.Position = Vector2.new(pos.X, pos.Y)
+        K.car_text.Visible = true
     else
-        car_prompt_text.Visible = false
+        K.car_text.Visible = false
     end
 end
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.Y and cfg.grab_car then
+        if held_car then
+            if held_car.PrimaryPart then
+                if car_pos then car_pos:Destroy() end
+                if car_vel then car_vel:Destroy() end
+                car_vel = Instance.new("BodyVelocity")
+                car_vel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                car_vel.Velocity = Camera.CFrame.LookVector * 300 + Vector3.new(0, 150, 0)
+                car_vel.Parent = held_car.PrimaryPart
+                task.delay(0.2, function() if car_vel then car_vel:Destroy() end end)
+            end
+            held_car = nil
+        else
+            local car = get_closest_car()
+            if car and car.PrimaryPart then
+                held_car = car
+                car_pos = Instance.new("BodyPosition")
+                car_pos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                car_pos.P = 10000
+                car_pos.Parent = car.PrimaryPart
+            end
+        end
+    end
+end)
 local fly=nil
 function K.update_movement(dt)
     local c=LocalPlayer.Character
@@ -420,6 +401,10 @@ function K.update_movement(dt)
     end
     local hrp=c:FindFirstChild("HumanoidRootPart")
     if hrp then hrp.CanCollide = not cfg.noclip end
+    
+    if held_car and car_pos and hrp then
+        car_pos.Position = hrp.Position + Vector3.new(0, 15, 0)
+    end
 
     if not hrp or not cfg.fly then
         if fly then fly:Destroy() fly=nil end
@@ -471,7 +456,7 @@ function K.update_misc(dt)
     local h=c:FindFirstChildOfClass("Humanoid")
     local hrp=c:FindFirstChild("HumanoidRootPart")
     
-    K.update_car()
+    draw_car_prompt()
 
     if cfg.freeze_anims and h then
         local an=h:FindFirstChildOfClass("Animator")
@@ -514,7 +499,6 @@ end
 
 K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}
 
--- LINORIA NORMAL, SEM MUDAR CORES
 local repo='https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
 local Library=loadstring(game:HttpGet(repo..'Library.lua'))()
 local TM=loadstring(game:HttpGet(repo..'addons/ThemeManager.lua'))()
@@ -522,7 +506,6 @@ local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
 
 local W=Library:CreateWindow({Title='Karpa Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
 local MainTab=W:AddTab('Main')
-local ExploitTab=W:AddTab('Exploit')
 local MovementTab=W:AddTab('Movement')
 local SettingsTab=W:AddTab('Settings')
 
@@ -556,23 +539,13 @@ EG:AddToggle('EspInventory',{Text='ESP Inventory',Default=false,Callback=functio
 EG:AddToggle('EspLine',{Text='ESP Line',Default=false,Callback=function(v) cfg.esp_line=v end})
 EG:AddDropdown('LineOrigin',{Text='Line Origin',Values={'top','bottom','center'},Default=1,Callback=function(v) cfg.esp_line_origin=v end})
 
--- ABA EXPLOIT
-local XG=ExploitTab:AddLeftGroupbox('Exploits')
-XG:AddButton('Desalgemar', function() K.uncuff() end)
-local tCar = XG:AddKeyPicker('GrabCarBind', {
-    Default = 'Y',
-    SyncToggleState = false,
-    Mode = 'Press',
-    Text = 'Pegar/Jogar Carro',
-    NoUI = false
-})
-tCar:OnClick(function() K.toggle_grab_car() end)
-
-local MiG=ExploitTab:AddRightGroupbox('Misc')
+local MiG=MainTab:AddRightGroupbox('Misc')
 local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
 local tSb=MiG:AddToggle('Spinbot',{Text='Spinbot',Default=false,Callback=function(v) cfg.spinbot=v end}); bk(tSb,'SbKey','Spinbot')
 MiG:AddSlider('SpinSpeed',{Text='Spin Speed',Default=360,Min=30,Max=2000,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
 local tFb=MiG:AddToggle('Fullbright',{Text='Fullbright',Default=false,Callback=function(v) cfg.fullbright=v end}); bk(tFb,'FbKey','Fullbright')
+MiG:AddButton('Desalgemar', function() K.uncuff() end)
+local tCar=MiG:AddToggle('GrabCar',{Text='Pegar/Jogar Carro (Y)',Default=false,Callback=function(v) cfg.grab_car=v end})
 
 local PG=MovementTab:AddLeftGroupbox('Movement')
 local tBypass=PG:AddToggle('SpeedBypassEnabled',{Text='Speed Bypass (TP Walk)',Default=false,Callback=function(v) cfg.speed_bypass_enabled=v end}); bk(tBypass,'SpKey','Speed Bypass')
@@ -593,7 +566,7 @@ MenuG:AddLabel('Menu keybind'):AddKeyPicker('MenuKeybind',{Default='RightShift',
 Library.ToggleKeybind=Options.MenuKeybind
 
 TM:SetLibrary(Library); SM:SetLibrary(Library)
-SM:IgnoreThemeSettings(); SM:SetIgnoreIndexes({'MenuKeybind', 'GrabCarBind'})
+SM:IgnoreThemeSettings(); SM:SetIgnoreIndexes({'MenuKeybind'})
 TM:SetFolder('KarpaHub'); SM:SetFolder('KarpaHub')
 SM:BuildConfigSection(SettingsTab)
 TM:ApplyToTab(SettingsTab)
