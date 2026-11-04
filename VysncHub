@@ -18,6 +18,7 @@ K.cfg = {
     speed_bypass_enabled=false, speed_bypass_val=60,
     jump_power=50, jump_enabled=false, infinite_jump=false, fly=false, fly_speed=50, noclip=false,
     freeze_anims=false, spinbot=false, spin_speed=360, fullbright=false,
+    grab_car=false,
 }
 local cfg = K.cfg
 
@@ -48,6 +49,7 @@ end
 function K.cleanup_drawings()
     K.remove_all_esp()
     if K.fov_circle then K.fov_circle:Remove() K.fov_circle = nil end
+    if K.car_text then K.car_text:Remove() K.car_text = nil end
 end
 
 Players.PlayerRemoving:Connect(function(p) K.remove_esp(p) end)
@@ -99,31 +101,15 @@ local function inv(p,c)
     return t
 end
 
-local function fullbox(c,head)
-    local hp,hon=Camera:WorldToViewportPoint(head.Position+Vector3.new(0,0.5,0))
+local function fullbox(c,head,hrp)
+    local hp,hon=Camera:WorldToViewportPoint(head.Position + Vector3.new(0,0.5,0))
     if not hon then return nil end
-    local fs=nil
-    -- Tenta R15
-    for _,n in ipairs({"LeftFoot","RightFoot","LeftLowerLeg","RightLowerLeg"}) do
-        local pt=c:FindFirstChild(n)
-        if pt and pt:IsA("BasePart") then
-            local p,on=Camera:WorldToViewportPoint(pt.Position)
-            if on and (not fs or p.Y>fs.Y) then fs=p end
-        end
-    end
-    -- Fallback R6 ou HRP
-    if not fs then
-        local hrp = c:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local p,on=Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0,2,0))
-            if on then fs=p end
-        end
-    end
-    if not fs then return nil end
-    local h=fs.Y-hp.Y
-    if h<=0 then return nil end
-    local w=h*0.45
-    return Vector2.new(hp.X-w/2,hp.Y),w,h
+    local rp,ron=Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0,3,0))
+    if not ron then return nil end
+    local h = rp.Y - hp.Y
+    if h <= 0 then h = 100 end
+    local w = h * 0.55
+    return Vector2.new(hp.X - w/2, hp.Y), w, h
 end
 
 local function hide(o)
@@ -172,8 +158,10 @@ function K.update_esp()
             elseif cfg.esp_line_origin=="center" then ori=mid end
             o.line.From=ori; o.line.To=sr; o.line.Visible=true
         else o.line.Visible=false end
+        
         local bl,bw,bh
-        if cfg.esp_box or cfg.esp_health then bl,bw,bh=fullbox(c,head) end
+        if cfg.esp_box or cfg.esp_health then bl,bw,bh=fullbox(c,head,hrp) end
+        
         if cfg.esp_box and bl then
             o.box.Size=Vector2.new(bw,bh); o.box.Position=bl; o.box.Visible=true
         else o.box.Visible=false end
@@ -210,6 +198,7 @@ function K.update_esp()
                 o.inventory.Text=txt; o.inventory.Position=Vector2.new(sh.X,sr.Y+36); o.inventory.Visible=true
             else o.inventory.Visible=false end
         else o.inventory.Visible=false end
+        
         if cfg.esp_skeleton then
             local skel = c:FindFirstChild("UpperTorso") and skel_r15 or skel_r6
             local i=1
@@ -229,7 +218,6 @@ function K.update_esp()
         else for _,l in ipairs(o.skeleton) do l.Visible=false end end
     end
 end
-
 local fovc=Drawing.new("Circle")
 fovc.Thickness=1; fovc.NumSides=64
 fovc.Color=Color3.fromRGB(255,255,255); fovc.Transparency=0.5; fovc.Filled=false; fovc.Visible=false
@@ -296,6 +284,93 @@ function K.update_aim()
     if t then aim(t) end
 end
 
+function K.uncuff()
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, obj in ipairs(char:GetDescendants()) do
+        local n = obj.Name:lower()
+        if n:find("cuff") or n:find("algema") or n:find("rope") or n:find("tie") then
+            if obj:IsA("BasePart") then obj.Transparency = 1 end
+            if obj:IsA("Accessory") or obj:IsA("Model") then obj:Destroy() end
+        end
+    end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.WalkSpeed = 16; hum.JumpPower = 50 end
+end
+
+local held_car = nil
+local car_pos = nil
+local car_vel = nil
+
+local function get_closest_car()
+    local closest, dist = nil, 25
+    local my_pos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position
+    if not my_pos then return nil end
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("VehicleSeat") then
+            local model = v.Parent
+            if model and model:FindFirstChild("PrimaryPart") then
+                local d = (model.PrimaryPart.Position - my_pos).Magnitude
+                if d < dist then closest, dist = model, d end
+            end
+        end
+    end
+    return closest
+end
+
+local function draw_car_prompt()
+    if not cfg.grab_car then
+        if K.car_text then K.car_text:Remove() K.car_text = nil end
+        return
+    end
+    local car = get_closest_car()
+    if not car then
+        if K.car_text then K.car_text.Visible = false end
+        return
+    end
+    if not K.car_text then
+        K.car_text = Drawing.new("Text")
+        K.car_text.Size = 16
+        K.car_text.Center = true
+        K.car_text.Outline = true
+        K.car_text.Color = Color3.fromRGB(255, 255, 0)
+    end
+    local pos, on_screen = Camera:WorldToViewportPoint(car.PrimaryPart.Position + Vector3.new(0, 3, 0))
+    if on_screen then
+        K.car_text.Text = "[Y] Puxar Carro"
+        K.car_text.Position = Vector2.new(pos.X, pos.Y)
+        K.car_text.Visible = true
+    else
+        K.car_text.Visible = false
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.Y and cfg.grab_car then
+        if held_car then
+            if held_car.PrimaryPart then
+                if car_pos then car_pos:Destroy() end
+                if car_vel then car_vel:Destroy() end
+                car_vel = Instance.new("BodyVelocity")
+                car_vel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                car_vel.Velocity = Camera.CFrame.LookVector * 300 + Vector3.new(0, 150, 0)
+                car_vel.Parent = held_car.PrimaryPart
+                task.delay(0.2, function() if car_vel then car_vel:Destroy() end end)
+            end
+            held_car = nil
+        else
+            local car = get_closest_car()
+            if car and car.PrimaryPart then
+                held_car = car
+                car_pos = Instance.new("BodyPosition")
+                car_pos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                car_pos.P = 10000
+                car_pos.Parent = car.PrimaryPart
+            end
+        end
+    end
+end)
 local fly=nil
 function K.update_movement(dt)
     local c=LocalPlayer.Character
@@ -303,13 +378,11 @@ function K.update_movement(dt)
     local h=c:FindFirstChildOfClass("Humanoid")
     if not h then return end
     
-    -- WalkSpeed bypass via TP Walk (Nudge CFrame)
     if cfg.speed_bypass_enabled then
-        h.WalkSpeed = 16 -- Mantem o padrao para nao detectar
+        h.WalkSpeed = 16
         if h.MoveDirection.Magnitude > 0 then
             local hrp = c:FindFirstChild("HumanoidRootPart")
             if hrp then
-                -- Move o HRP suavemente baseado na direcao e no slider
                 local move = h.MoveDirection * cfg.speed_bypass_val * dt
                 hrp.CFrame = hrp.CFrame + move
             end
@@ -326,6 +399,10 @@ function K.update_movement(dt)
     local hrp=c:FindFirstChild("HumanoidRootPart")
     if hrp then hrp.CanCollide = not cfg.noclip end
     
+    if held_car and car_pos and hrp then
+        car_pos.Position = hrp.Position + Vector3.new(0, 15, 0)
+    end
+
     if not hrp or not cfg.fly then
         if fly then fly:Destroy() fly=nil end
         return
@@ -375,6 +452,9 @@ function K.update_misc(dt)
     if not c then return end
     local h=c:FindFirstChildOfClass("Humanoid")
     local hrp=c:FindFirstChild("HumanoidRootPart")
+    
+    draw_car_prompt()
+
     if cfg.freeze_anims and h then
         local an=h:FindFirstChildOfClass("Animator")
         if an then
@@ -414,7 +494,9 @@ function K.update_misc(dt)
     spin_av.AngularVelocity=Vector3.new(0,math.rad(spd),0)
 end
 
-K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}local repo='https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
+K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}
+
+local repo='https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
 local Library=loadstring(game:HttpGet(repo..'Library.lua'))()
 local TM=loadstring(game:HttpGet(repo..'addons/ThemeManager.lua'))()
 local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
@@ -465,6 +547,10 @@ local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callbac
 local tSb=MiG:AddToggle('Spinbot',{Text='Spinbot',Default=false,Callback=function(v) cfg.spinbot=v end}); bk(tSb,'SbKey','Spinbot')
 MiG:AddSlider('SpinSpeed',{Text='Spin Speed',Default=360,Min=30,Max=2000,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
 local tFb=MiG:AddToggle('Fullbright',{Text='Fullbright',Default=false,Callback=function(v) cfg.fullbright=v end}); bk(tFb,'FbKey','Fullbright')
+MiG:AddButton('Desalgemar', function() K.uncuff() end)
+
+local CG=MainTab:AddRightGroupbox('Sintonia RP')
+CG:AddToggle('GrabCar',{Text='Pegar/Jogar Carro (Tecla Y)',Default=false,Callback=function(v) cfg.grab_car=v end})
 
 local PG=MovementTab:AddLeftGroupbox('Movement')
 local tBypass=PG:AddToggle('SpeedBypassEnabled',{Text='Speed Bypass (TP Walk)',Default=false,Callback=function(v) cfg.speed_bypass_enabled=v end}); bk(tBypass,'SpKey','Speed Bypass')
