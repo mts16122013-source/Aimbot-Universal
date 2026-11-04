@@ -309,7 +309,7 @@ car_prompt_text.Color = Color3.fromRGB(255, 255, 0)
 car_prompt_text.Visible = false
 
 local function get_closest_car()
-    local closest, dist = nil, 100 -- Raio de 100 studs
+    local closest, dist = nil, 100
     local my_char = LocalPlayer.Character
     local hrp = my_char and my_char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
@@ -334,19 +334,17 @@ end
 
 function K.toggle_grab_car()
     if held_car then
-        -- Jogar o carro
         if car_pos then car_pos:Destroy() car_pos = nil end
         if last_car_part and last_car_part.Parent then
             local vel = Instance.new("BodyVelocity")
             vel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            vel.Velocity = Camera.CFrame.LookVector * 350 + Vector3.new(0, 200, 0) -- Força do arremesso
+            vel.Velocity = Camera.CFrame.LookVector * 350 + Vector3.new(0, 200, 0)
             vel.Parent = last_car_part
             task.delay(0.2, function() if vel then vel:Destroy() end end)
         end
         held_car = nil
         last_car_part = nil
     else
-        -- Pegar o carro
         local car = get_closest_car()
         if car then
             local primary = car.PrimaryPart or car:FindFirstChildWhichIsA("BasePart")
@@ -376,7 +374,7 @@ function K.update_car()
         if on_screen then
             local key = "G"
             if Options and Options.GrabCarBind then key = Options.GrabCarBind.Value end
-            car_prompt_text.Text = "["..key.."] Pegar Carro"
+            car_prompt_text.Text = "["..tostring(key).."] Pegar Carro"
             car_prompt_text.Position = Vector2.new(pos.X, pos.Y)
             car_prompt_text.Visible = true
         else
@@ -518,8 +516,7 @@ Library.MainColor       = Color3.fromRGB(24, 16, 38)
 Library.BackgroundColor = Color3.fromRGB(18, 12, 30)
 Library.OutlineColor    = Color3.fromRGB(70, 40, 120)
 
--- UI Retangular (Mais Larga)
-local W=Library:CreateWindow({Title='Nyxium Hub',Center=true,AutoShow=true,Size=UDim2.fromOffset(640, 460),TabPadding=8,MenuFadeTime=0.2})
+local W=Library:CreateWindow({Title='Nyxium Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
 local MainTab=W:AddTab('Main')
 local ExploitTab=W:AddTab('Exploit')
 local MovementTab=W:AddTab('Movement')
@@ -538,13 +535,10 @@ bk(tFov,'FovKey','FOV Circle')
 AG:AddSlider('Smoothness',{Text='Smoothness (1=rapido)',Default=25,Min=1,Max=100,Rounding=0,Callback=function(v) cfg.smoothness=v end})
 AG:AddSlider('Prediction',{Text='Prediction (x100)',Default=0,Min=0,Max=100,Rounding=0,Callback=function(v) cfg.prediction=v/100 end})
 AG:AddDropdown('HitboxSelect',{Text='Hitbox',Values={'Head','UpperTorso','LowerTorso','HumanoidRootPart'},Default=1,Callback=function(v) cfg.hitbox=v end})
-
--- VISIBLE CHECK COM KEYBIND AQUI
 local tVis=AG:AddToggle('VisibleCheck',{Text='Visible Check',Default=true,Callback=function(v) cfg.visible_check=v end})
 bk(tVis,'VisKey','Visible Check')
-
 AG:AddToggle('ForceAim',{Text='Force Aim',Default=true,Callback=function(v) cfg.force_aim=v end})
-AG:AddToggle('DeadCheck',{Text='Dead Check',Default=true,Tooltip='Nao puxa em quem ta morto',Callback=function(v) cfg.dead_check=v end})
+AG:AddToggle('DeadCheck',{Text='Dead Check',Default=true,Callback=function(v) cfg.dead_check=v end})
 AG:AddToggle('TeamCheck',{Text='Team Check',Default=false,Callback=function(v) cfg.team_check=v end})
 
 local EG=MainTab:AddRightGroupbox('ESP')
@@ -559,21 +553,18 @@ EG:AddToggle('EspInventory',{Text='ESP Inventory',Default=false,Callback=functio
 EG:AddToggle('EspLine',{Text='ESP Line',Default=false,Callback=function(v) cfg.esp_line=v end})
 EG:AddDropdown('LineOrigin',{Text='Line Origin',Values={'top','bottom','center'},Default=1,Callback=function(v) cfg.esp_line_origin=v end})
 
--- NOVA ABA EXPLOIT
 local XG=ExploitTab:AddLeftGroupbox('Exploits')
 XG:AddButton('Desalgemar', function() K.uncuff() end)
-
--- Keybind do Carro configurado pela UI
 local tCar = XG:AddKeyPicker('GrabCarBind', {
     Default = 'G',
     SyncToggleState = false,
     Mode = 'Press',
     Text = 'Pegar/Jogar Carro',
-    NoUI = false,
-    Callback = function()
-        K.toggle_grab_car()
-    end
+    NoUI = false
 })
+if tCar then
+    tCar:OnClick(function() K.toggle_grab_car() end)
+end
 
 local MiG=ExploitTab:AddRightGroupbox('Misc')
 local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
