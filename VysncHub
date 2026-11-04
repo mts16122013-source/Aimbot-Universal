@@ -9,20 +9,18 @@ local K = getgenv().karpa or {}
 getgenv().karpa = K
 
 K.cfg = {
-    aim_enabled=false, aim_hide_click=false, silent=true, fov=120, fov_visible=false,
-    visible_check=true, force_aim=true, prediction=0.15, hitbox="Head",
-    aim_key=Enum.UserInputType.MouseButton2,
+    aim_enabled=false, aim_hide_click=true, silent=true, fov=120, fov_visible=false,
+    visible_check=true, force_aim=true, prediction=0, smoothness=25, hitbox="Head",
+    aim_key=Enum.UserInputType.MouseButton2, team_check=false,
     esp_line=false, esp_line_origin="top", esp_skeleton=false, esp_box=false,
     esp_health=false, esp_name=false, esp_display=false, esp_weapon=false,
     esp_distance=false, esp_inventory=false,
     speed=16, speed_enabled=false, jump_power=50, jump_enabled=false,
     infinite_jump=false, fly=false, fly_speed=50, noclip=false,
-    freeze_anims=false, spinbot=false, spin_speed=360,
-    fullbright=false, no_fog=false, cam_fov=70,
+    freeze_anims=false, spinbot=false, spin_speed=360, fullbright=false,
 }
 local cfg = K.cfg
 
--- right click tracking (fix)
 local rmb_down = false
 UserInputService.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then rmb_down = true end
@@ -126,6 +124,7 @@ function K.update_esp()
     local mid=Vector2.new(ss.X/2,ss.Y/2)
     local mc=LocalPlayer.Character
     local mh=mc and mc:FindFirstChild("HumanoidRootPart")
+    local myteam=LocalPlayer.Team
     local any=cfg.esp_line or cfg.esp_skeleton or cfg.esp_box or cfg.esp_health
         or cfg.esp_name or cfg.esp_display or cfg.esp_weapon or cfg.esp_distance or cfg.esp_inventory
     for _,p in ipairs(Players:GetPlayers()) do
@@ -230,8 +229,10 @@ end
 local function target()
     local best,bd=nil,cfg.fov
     local ce=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
+    local myteam=LocalPlayer.Team
     for _,p in ipairs(Players:GetPlayers()) do
         if p==LocalPlayer then continue end
+        if cfg.team_check and p.Team==myteam then continue end
         local c=p.Character
         if not c then continue end
         local pt=c:FindFirstChild(cfg.hitbox)
@@ -250,15 +251,29 @@ end
 
 local function aim(t)
     local ap=t.Position+t.AssemblyLinearVelocity*cfg.prediction
-    local ok,ncf=pcall(function() return CFrame.lookAt(Camera.CFrame.Position,ap) end)
-    if ok then Camera.CFrame=ncf end
+    local ok,desired=pcall(function() return CFrame.lookAt(Camera.CFrame.Position,ap) end)
+    if not ok then return end
+    if cfg.smoothness<=1 then
+        Camera.CFrame=desired
+    else
+        local alpha=1/cfg.smoothness
+        if alpha>1 then alpha=1 end
+        Camera.CFrame=Camera.CFrame:Lerp(desired,alpha)
+    end
 end
 
-function K.update_fov()
+function K.update_aim()
     if cfg.fov_visible then
         fovc.Position=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
         fovc.Radius=cfg.fov; fovc.Visible=true
     else fovc.Visible=false end
+    if not cfg.aim_enabled then return end
+    if cfg.aim_hide_click then
+        local held = rmb_down or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+        if not held then return end
+    end
+    local t=target()
+    if t then aim(t) end
 end
 
 local fly=nil
@@ -270,7 +285,13 @@ function K.update_movement()
     h.WalkSpeed=cfg.speed_enabled and cfg.speed or 16
     if cfg.jump_enabled then h.UseJumpPower=true; h.JumpPower=cfg.jump_power
     else h.JumpPower=50 end
+    for _,p in ipairs(c:GetDescendants()) do
+        if p:IsA("BasePart") and p.Name~="HumanoidRootPart" then
+            p.CanCollide = not cfg.noclip
+        end
+    end
     local hrp=c:FindFirstChild("HumanoidRootPart")
+    if hrp then hrp.CanCollide = not cfg.noclip end
     if not hrp or not cfg.fly then
         if fly then fly:Destroy() fly=nil end
         return
@@ -292,15 +313,6 @@ function K.update_movement()
     fly.Velocity=d*cfg.fly_speed
 end
 
-function K.update_noclip()
-    if not cfg.noclip then return end
-    local c=LocalPlayer.Character
-    if not c then return end
-    for _,p in ipairs(c:GetDescendants()) do
-        if p:IsA("BasePart") and p.CanCollide then p.CanCollide=false end
-    end
-end
-
 UserInputService.JumpRequest:Connect(function()
     if cfg.infinite_jump then
         local c=LocalPlayer.Character
@@ -310,33 +322,7 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 local spin_av=nil
-function K.update_misc()
-    local c=LocalPlayer.Character
-    if not c then return end
-    local h=c:FindFirstChildOfClass("Humanoid")
-    local hrp=c:FindFirstChild("HumanoidRootPart")
-    if cfg.freeze_anims and h then
-        local an=h:FindFirstChildOfClass("Animator")
-        if an then
-            for _,t in ipairs(an:GetPlayingAnimationTracks()) do
-                if t.Speed~=0 then t:AdjustSpeed(0) end
-            end
-        end
-    end
-    if not hrp or not cfg.spinbot then
-        if spin_av then spin_av:Destroy() spin_av=nil end
-        return
-    end
-    if not spin_av or spin_av.Parent~=hrp then
-        if spin_av then spin_av:Destroy() end
-        spin_av=Instance.new("BodyAngularVelocity")
-        spin_av.MaxTorque=Vector3.new(0,1e6,0)
-        spin_av.P=1e4
-        spin_av.AngularVelocity=Vector3.zero
-        spin_av.Parent=hrp
-    end
-    spin_av.AngularVelocity=Vector3.new(0,math.rad(cfg.spin_speed),0)
-end
+local orig_lighting=nil
 
 function K.restore_anims()
     local c=LocalPlayer.Character
@@ -350,39 +336,48 @@ function K.restore_anims()
     end
 end
 
-local orig_light, orig_fog = nil, nil
-function K.update_visuals()
+function K.update_misc(dt)
+    local c=LocalPlayer.Character
+    if not c then return end
+    local h=c:FindFirstChildOfClass("Humanoid")
+    local hrp=c:FindFirstChild("HumanoidRootPart")
+    if cfg.freeze_anims and h then
+        local an=h:FindFirstChildOfClass("Animator")
+        if an then
+            for _,t in ipairs(an:GetPlayingAnimationTracks()) do
+                if t.Speed~=0 then t:AdjustSpeed(0) end
+            end
+        end
+    end
     if cfg.fullbright then
-        if not orig_light then
-            orig_light={Brightness=Lighting.Brightness,Ambient=Lighting.Ambient,
-                OutdoorAmbient=Lighting.OutdoorAmbient,ColorShift_Top=Lighting.ColorShift_Top,
-                ColorShift_Bottom=Lighting.ColorShift_Bottom}
+        if not orig_lighting then
+            orig_lighting={A=Lighting.Ambient,O=Lighting.OutdoorAmbient,B=Lighting.Brightness,F=Lighting.FogEnd}
         end
+        Lighting.Ambient=Color3.new(1,1,1)
+        Lighting.OutdoorAmbient=Color3.new(1,1,1)
         Lighting.Brightness=3
-        Lighting.Ambient=Color3.fromRGB(220,220,220)
-        Lighting.OutdoorAmbient=Color3.fromRGB(220,220,220)
-        Lighting.ColorShift_Top=Color3.fromRGB(0,0,0)
-        Lighting.ColorShift_Bottom=Color3.fromRGB(0,0,0)
-    else
-        if orig_light then
-            for k,v in pairs(orig_light) do Lighting[k]=v end
-            orig_light=nil
-        end
+        Lighting.FogEnd=100000
+    elseif orig_lighting then
+        Lighting.Ambient=orig_lighting.A
+        Lighting.OutdoorAmbient=orig_lighting.O
+        Lighting.Brightness=orig_lighting.B
+        Lighting.FogEnd=orig_lighting.F
+        orig_lighting=nil
     end
-
-    if cfg.no_fog then
-        if not orig_fog then orig_fog={FogEnd=Lighting.FogEnd,FogStart=Lighting.FogStart} end
-        Lighting.FogEnd=1e6
-        Lighting.FogStart=1e6
-    else
-        if orig_fog then
-            Lighting.FogEnd=orig_fog.FogEnd
-            Lighting.FogStart=orig_fog.FogStart
-            orig_fog=nil
-        end
+    if not hrp or not cfg.spinbot then
+        if spin_av then spin_av:Destroy() spin_av=nil end
+        return
     end
-
-    Camera.FieldOfView=cfg.cam_fov
+    if not spin_av or spin_av.Parent~=hrp then
+        if spin_av then spin_av:Destroy() end
+        spin_av=Instance.new("BodyAngularVelocity")
+        spin_av.Name="KarpaSpin"
+        spin_av.MaxTorque=Vector3.new(0,1e5,0)
+        spin_av.P=1000
+        spin_av.Parent=hrp
+    end
+    local spd=math.min(cfg.spin_speed,2000)
+    spin_av.AngularVelocity=Vector3.new(0,math.rad(spd),0)
 end
 
 K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}
@@ -392,24 +387,28 @@ local TM=loadstring(game:HttpGet(repo..'addons/ThemeManager.lua'))()
 local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
 
 local W=Library:CreateWindow({Title='Karpa Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
-local T={Aimbot=W:AddTab('Aimbot'),ESP=W:AddTab('ESP'),Movement=W:AddTab('Movement'),Misc=W:AddTab('Misc'),Visuals=W:AddTab('Visuals'),['UI Settings']=W:AddTab('UI Settings')}
+local MainTab=W:AddTab('Main')
+local SettingsTab=W:AddTab('Settings')
 
 local function bk(tg,name,txt)
     tg:AddKeyPicker(name,{Default='None',SyncToggleState=true,Mode='Toggle',Text=txt or name,NoUI=false})
 end
 
-local AG=T.Aimbot:AddLeftGroupbox('Aimbot')
-local tAim=AG:AddToggle('AimEnabled',{Text='Enable Aimbot',Default=false,Callback=function(v) cfg.aim_enabled=v end}); bk(tAim,'AimKey','Aimbot')
-AG:AddToggle('AimHideClick',{Text='Hide Click (segurar botao direito)',Default=false,Callback=function(v) cfg.aim_hide_click=v end})
-AG:AddToggle('SilentAim',{Text='Silent Aim',Default=true,Callback=function(v) cfg.silent=v end})
+local AG=MainTab:AddLeftGroupbox('Aimbot')
+local tAim=AG:AddToggle('AimEnabled',{Text='Enable Aimbot',Default=false,Callback=function(v) cfg.aim_enabled=v end})
+bk(tAim,'AimKey','Aimbot')
+AG:AddToggle('AimHideClick',{Text='Hold RMB (segurar botao direito)',Default=true,Tooltip='Se ligado so puxa segurando o botao direito',Callback=function(v) cfg.aim_hide_click=v end})
+AG:AddToggle('TeamCheck',{Text='Team Check',Default=false,Callback=function(v) cfg.team_check=v end})
 AG:AddSlider('AimFOV',{Text='FOV',Default=120,Min=20,Max=500,Rounding=0,Callback=function(v) cfg.fov=v end})
-local tFov=AG:AddToggle('FOVVisible',{Text='Show FOV Circle',Default=false,Callback=function(v) cfg.fov_visible=v end}); bk(tFov,'FovKey','FOV Circle')
+local tFov=AG:AddToggle('FOVVisible',{Text='Show FOV Circle',Default=false,Callback=function(v) cfg.fov_visible=v end})
+bk(tFov,'FovKey','FOV Circle')
+AG:AddSlider('Smoothness',{Text='Smoothness (1=rapido)',Default=25,Min=1,Max=100,Rounding=0,Callback=function(v) cfg.smoothness=v end})
+AG:AddSlider('Prediction',{Text='Prediction (x100)',Default=0,Min=0,Max=100,Rounding=0,Callback=function(v) cfg.prediction=v/100 end})
+AG:AddDropdown('HitboxSelect',{Text='Hitbox',Values={'Head','UpperTorso','LowerTorso','HumanoidRootPart'},Default=1,Callback=function(v) cfg.hitbox=v end})
 AG:AddToggle('VisibleCheck',{Text='Visible Check',Default=true,Callback=function(v) cfg.visible_check=v end})
 AG:AddToggle('ForceAim',{Text='Force Aim',Default=true,Callback=function(v) cfg.force_aim=v end})
-AG:AddDropdown('HitboxSelect',{Text='Hitbox',Values={'Head','UpperTorso','LowerTorso','HumanoidRootPart'},Default=1,Callback=function(v) cfg.hitbox=v end})
-AG:AddSlider('Prediction',{Text='Prediction (x100)',Default=15,Min=0,Max=100,Rounding=0,Callback=function(v) cfg.prediction=v/100 end})
 
-local EG=T.ESP:AddLeftGroupbox('ESP')
+local EG=MainTab:AddRightGroupbox('ESP')
 local tBox=EG:AddToggle('EspBox',{Text='ESP Box',Default=false,Callback=function(v) cfg.esp_box=v end}); bk(tBox,'BoxKey','ESP Box')
 local tSk=EG:AddToggle('EspSkeleton',{Text='ESP Skeleton',Default=false,Callback=function(v) cfg.esp_skeleton=v end}); bk(tSk,'SkKey','Skeleton')
 local tNm=EG:AddToggle('EspName',{Text='ESP Name',Default=false,Callback=function(v) cfg.esp_name=v end}); bk(tNm,'NmKey','Name')
@@ -421,27 +420,23 @@ local tIv=EG:AddToggle('EspInventory',{Text='ESP Inventory',Default=false,Callba
 local tLn=EG:AddToggle('EspLine',{Text='ESP Line',Default=false,Callback=function(v) cfg.esp_line=v end}); bk(tLn,'LnKey','ESP Line')
 EG:AddDropdown('LineOrigin',{Text='Line Origin',Values={'top','bottom','center'},Default=1,Callback=function(v) cfg.esp_line_origin=v end})
 
-local MG=T.Movement:AddLeftGroupbox('Movement')
-local tSp=MG:AddToggle('SpeedEnabled',{Text='Speed',Default=false,Callback=function(v) cfg.speed_enabled=v end}); bk(tSp,'SpKey','Speed')
-MG:AddSlider('WalkSpeed',{Text='Walk Speed',Default=16,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.speed=v; cfg.speed_enabled=true end})
-local tJp=MG:AddToggle('JumpEnabled',{Text='Jump Power',Default=false,Callback=function(v) cfg.jump_enabled=v end}); bk(tJp,'JpKey','Jump')
-MG:AddSlider('JumpPower',{Text='Jump Power Value',Default=50,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.jump_power=v; cfg.jump_enabled=true end})
-local tIj=MG:AddToggle('InfiniteJump',{Text='Infinite Jump',Default=false,Callback=function(v) cfg.infinite_jump=v end}); bk(tIj,'IjKey','Infinite Jump')
-local tFl=MG:AddToggle('FlyEnabled',{Text='Fly',Default=false,Callback=function(v) cfg.fly=v end}); bk(tFl,'FlKey','Fly')
-MG:AddSlider('FlySpeed',{Text='Fly Speed',Default=50,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.fly_speed=v end})
-local tNc=MG:AddToggle('Noclip',{Text='Noclip',Default=false,Callback=function(v) cfg.noclip=v end}); bk(tNc,'NcKey','Noclip')
-
-local MiG=T.Misc:AddLeftGroupbox('Misc')
+local MiG=MainTab:AddRightGroupbox('Misc')
 local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
 local tSb=MiG:AddToggle('Spinbot',{Text='Spinbot',Default=false,Callback=function(v) cfg.spinbot=v end}); bk(tSb,'SbKey','Spinbot')
-MiG:AddSlider('SpinSpeed',{Text='Spin Speed (graus/seg)',Default=360,Min=30,Max=1440,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
+MiG:AddSlider('SpinSpeed',{Text='Spin Speed (graus/seg)',Default=360,Min=30,Max=2000,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
+local tFb=MiG:AddToggle('Fullbright',{Text='Fullbright',Default=false,Callback=function(v) cfg.fullbright=v end}); bk(tFb,'FbKey','Fullbright')
 
-local VG=T.Visuals:AddLeftGroupbox('Visuals')
-local tFb=VG:AddToggle('Fullbright',{Text='Fullbright',Default=false,Callback=function(v) cfg.fullbright=v end}); bk(tFb,'FbKey','Fullbright')
-local tNf=VG:AddToggle('NoFog',{Text='No Fog',Default=false,Callback=function(v) cfg.no_fog=v end}); bk(tNf,'NfKey','No Fog')
-VG:AddSlider('CamFOV',{Text='Camera FOV',Default=70,Min=40,Max=120,Rounding=0,Callback=function(v) cfg.cam_fov=v end})
+local PG=SettingsTab:AddLeftGroupbox('Movement')
+local tSp=PG:AddToggle('SpeedEnabled',{Text='Speed',Default=false,Callback=function(v) cfg.speed_enabled=v end}); bk(tSp,'SpKey','Speed')
+PG:AddSlider('WalkSpeed',{Text='Walk Speed',Default=16,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.speed=v; cfg.speed_enabled=true end})
+local tJp=PG:AddToggle('JumpEnabled',{Text='Jump Power',Default=false,Callback=function(v) cfg.jump_enabled=v end}); bk(tJp,'JpKey','Jump')
+PG:AddSlider('JumpPower',{Text='Jump Power Value',Default=50,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.jump_power=v; cfg.jump_enabled=true end})
+local tIj=PG:AddToggle('InfiniteJump',{Text='Infinite Jump',Default=false,Callback=function(v) cfg.infinite_jump=v end}); bk(tIj,'IjKey','Infinite Jump')
+local tFl=PG:AddToggle('FlyEnabled',{Text='Fly',Default=false,Callback=function(v) cfg.fly=v end}); bk(tFl,'FlKey','Fly')
+PG:AddSlider('FlySpeed',{Text='Fly Speed',Default=50,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.fly_speed=v end})
+local tNc=PG:AddToggle('Noclip',{Text='Noclip',Default=false,Callback=function(v) cfg.noclip=v end}); bk(tNc,'NcKey','Noclip')
 
-local MenuG=T['UI Settings']:AddLeftGroupbox('Menu')
+local MenuG=SettingsTab:AddRightGroupbox('Menu')
 MenuG:AddButton('Unload',function() Library:Unload() end)
 MenuG:AddLabel('Menu keybind'):AddKeyPicker('MenuKeybind',{Default='RightShift',NoUI=true,Text='Menu keybind'})
 Library.ToggleKeybind=Options.MenuKeybind
@@ -449,20 +444,10 @@ Library.ToggleKeybind=Options.MenuKeybind
 TM:SetLibrary(Library); SM:SetLibrary(Library)
 SM:IgnoreThemeSettings(); SM:SetIgnoreIndexes({'MenuKeybind'})
 TM:SetFolder('KarpaHub'); SM:SetFolder('KarpaHub')
-SM:BuildConfigSection(T['UI Settings'])
-TM:ApplyToTab(T['UI Settings'])
+SM:BuildConfigSection(SettingsTab)
+TM:ApplyToTab(SettingsTab)
 SM:LoadAutoloadConfig()
 
-RunService.RenderStepped:Connect(function()
-    K.update_esp(); K.update_fov(); K.update_movement()
-    K.update_noclip(); K.update_misc(); K.update_visuals()
-end)
-
-RunService:BindToRenderStep("KarpaAim", Enum.RenderPriority.Camera.Value + 1, function()
-    if not cfg.aim_enabled then return end
-    local act = true
-    if cfg.aim_hide_click then act = rmb_down end
-    if not act then return end
-    local t = target()
-    if t then aim(t) end
+RunService.RenderStepped:Connect(function(dt)
+    K.update_esp(); K.update_aim(); K.update_movement(); K.update_misc(dt)
 end)
