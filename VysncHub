@@ -49,6 +49,28 @@ function K.remove_esp(player)
     esp_objects[player]=nil
 end
 
+function K.remove_all_esp()
+    for player in pairs(esp_objects) do
+        K.remove_esp(player)
+    end
+end
+
+function K.cleanup_drawings()
+    K.remove_all_esp()
+    if K.fov_circle then
+        K.fov_circle:Remove()
+        K.fov_circle = nil
+    end
+end
+
+Players.PlayerRemoving:Connect(function(p)
+    K.remove_esp(p)
+end)
+
+LocalPlayer.CharacterRemoving:Connect(function()
+    K.remove_all_esp()
+end)
+
 local function create_esp(player)
     if player==LocalPlayer or esp_objects[player] then return end
     local o={}
@@ -118,13 +140,18 @@ local function hide(o)
 end
 
 function K.update_esp()
+    for player in pairs(esp_objects) do
+        if not player.Parent then
+            K.remove_esp(player)
+        end
+    end
+
     local ss=Camera.ViewportSize
     local top=Vector2.new(ss.X/2,0)
     local bot=Vector2.new(ss.X/2,ss.Y)
     local mid=Vector2.new(ss.X/2,ss.Y/2)
     local mc=LocalPlayer.Character
     local mh=mc and mc:FindFirstChild("HumanoidRootPart")
-    local myteam=LocalPlayer.Team
     local any=cfg.esp_line or cfg.esp_skeleton or cfg.esp_box or cfg.esp_health
         or cfg.esp_name or cfg.esp_display or cfg.esp_weapon or cfg.esp_distance or cfg.esp_inventory
     for _,p in ipairs(Players:GetPlayers()) do
@@ -263,10 +290,12 @@ local function aim(t)
 end
 
 function K.update_aim()
-    if cfg.fov_visible then
-        fovc.Position=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
-        fovc.Radius=cfg.fov; fovc.Visible=true
-    else fovc.Visible=false end
+    if cfg.fov_visible and K.fov_circle then
+        K.fov_circle.Position=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
+        K.fov_circle.Radius=cfg.fov; K.fov_circle.Visible=true
+    elseif K.fov_circle then
+        K.fov_circle.Visible=false
+    end
     if not cfg.aim_enabled then return end
     if cfg.aim_hide_click then
         local held = rmb_down or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
@@ -437,7 +466,10 @@ PG:AddSlider('FlySpeed',{Text='Fly Speed',Default=50,Min=16,Max=250,Rounding=0,C
 local tNc=PG:AddToggle('Noclip',{Text='Noclip',Default=false,Callback=function(v) cfg.noclip=v end}); bk(tNc,'NcKey','Noclip')
 
 local MenuG=SettingsTab:AddRightGroupbox('Menu')
-MenuG:AddButton('Unload',function() Library:Unload() end)
+MenuG:AddButton('Unload',function()
+    K.cleanup_drawings()
+    Library:Unload()
+end)
 MenuG:AddLabel('Menu keybind'):AddKeyPicker('MenuKeybind',{Default='RightShift',NoUI=true,Text='Menu keybind'})
 Library.ToggleKeybind=Options.MenuKeybind
 
