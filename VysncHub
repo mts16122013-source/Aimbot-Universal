@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
@@ -15,10 +16,20 @@ K.cfg = {
     esp_health=false, esp_name=false, esp_display=false, esp_weapon=false,
     esp_distance=false, esp_inventory=false,
     speed=16, speed_enabled=false, jump_power=50, jump_enabled=false,
-    infinite_jump=false, fly=false, fly_speed=50,
+    infinite_jump=false, fly=false, fly_speed=50, noclip=false,
     freeze_anims=false, spinbot=false, spin_speed=360,
+    fullbright=false, no_fog=false, cam_fov=70,
 }
 local cfg = K.cfg
+
+-- right click tracking (fix)
+local rmb_down = false
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then rmb_down = true end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then rmb_down = false end
+end)
 
 K.esp_objects = {}
 local esp_objects = K.esp_objects
@@ -240,23 +251,14 @@ end
 local function aim(t)
     local ap=t.Position+t.AssemblyLinearVelocity*cfg.prediction
     local ok,ncf=pcall(function() return CFrame.lookAt(Camera.CFrame.Position,ap) end)
-    if ok then
-        Camera.CFrame=ncf
-        if cfg.force_aim then task.wait(); pcall(function() Camera.CFrame=ncf end) end
-    end
+    if ok then Camera.CFrame=ncf end
 end
 
-function K.update_aim()
+function K.update_fov()
     if cfg.fov_visible then
         fovc.Position=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
         fovc.Radius=cfg.fov; fovc.Visible=true
     else fovc.Visible=false end
-    if not cfg.aim_enabled then return end
-    local act=true
-    if cfg.aim_hide_click then act=UserInputService:IsMouseButtonPressed(cfg.aim_key) end
-    if not act then return end
-    local t=target()
-    if t then aim(t) end
 end
 
 local fly=nil
@@ -290,6 +292,15 @@ function K.update_movement()
     fly.Velocity=d*cfg.fly_speed
 end
 
+function K.update_noclip()
+    if not cfg.noclip then return end
+    local c=LocalPlayer.Character
+    if not c then return end
+    for _,p in ipairs(c:GetDescendants()) do
+        if p:IsA("BasePart") and p.CanCollide then p.CanCollide=false end
+    end
+end
+
 UserInputService.JumpRequest:Connect(function()
     if cfg.infinite_jump then
         local c=LocalPlayer.Character
@@ -298,21 +309,8 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-local spin_g,spin_a=nil,0
-
-function K.restore_anims()
-    local c=LocalPlayer.Character
-    if not c then return end
-    local h=c:FindFirstChildOfClass("Humanoid")
-    if not h then return end
-    local an=h:FindFirstChildOfClass("Animator")
-    if not an then return end
-    for _,t in ipairs(an:GetPlayingAnimationTracks()) do
-        if t.Speed==0 then t:AdjustSpeed(1) end
-    end
-end
-
-function K.update_misc(dt)
+local spin_av=nil
+function K.update_misc()
     local c=LocalPlayer.Character
     if not c then return end
     local h=c:FindFirstChildOfClass("Humanoid")
@@ -326,17 +324,65 @@ function K.update_misc(dt)
         end
     end
     if not hrp or not cfg.spinbot then
-        if spin_g then spin_g:Destroy() spin_g=nil end
+        if spin_av then spin_av:Destroy() spin_av=nil end
         return
     end
-    if not spin_g or spin_g.Parent~=hrp then
-        if spin_g then spin_g:Destroy() end
-        spin_g=Instance.new("BodyGyro")
-        spin_g.MaxTorque=Vector3.new(1e5,1e5,1e5); spin_g.P=1e4; spin_g.Parent=hrp
+    if not spin_av or spin_av.Parent~=hrp then
+        if spin_av then spin_av:Destroy() end
+        spin_av=Instance.new("BodyAngularVelocity")
+        spin_av.MaxTorque=Vector3.new(0,1e6,0)
+        spin_av.P=1e4
+        spin_av.AngularVelocity=Vector3.zero
+        spin_av.Parent=hrp
     end
-    spin_a=spin_a+math.rad(cfg.spin_speed)*dt
-    if spin_a>math.pi*2 then spin_a-=math.pi*2 end
-    spin_g.CFrame=CFrame.new(hrp.Position)*CFrame.Angles(0,spin_a,0)
+    spin_av.AngularVelocity=Vector3.new(0,math.rad(cfg.spin_speed),0)
+end
+
+function K.restore_anims()
+    local c=LocalPlayer.Character
+    if not c then return end
+    local h=c:FindFirstChildOfClass("Humanoid")
+    if not h then return end
+    local an=h:FindFirstChildOfClass("Animator")
+    if not an then return end
+    for _,t in ipairs(an:GetPlayingAnimationTracks()) do
+        if t.Speed==0 then t:AdjustSpeed(1) end
+    end
+end
+
+local orig_light, orig_fog = nil, nil
+function K.update_visuals()
+    if cfg.fullbright then
+        if not orig_light then
+            orig_light={Brightness=Lighting.Brightness,Ambient=Lighting.Ambient,
+                OutdoorAmbient=Lighting.OutdoorAmbient,ColorShift_Top=Lighting.ColorShift_Top,
+                ColorShift_Bottom=Lighting.ColorShift_Bottom}
+        end
+        Lighting.Brightness=3
+        Lighting.Ambient=Color3.fromRGB(220,220,220)
+        Lighting.OutdoorAmbient=Color3.fromRGB(220,220,220)
+        Lighting.ColorShift_Top=Color3.fromRGB(0,0,0)
+        Lighting.ColorShift_Bottom=Color3.fromRGB(0,0,0)
+    else
+        if orig_light then
+            for k,v in pairs(orig_light) do Lighting[k]=v end
+            orig_light=nil
+        end
+    end
+
+    if cfg.no_fog then
+        if not orig_fog then orig_fog={FogEnd=Lighting.FogEnd,FogStart=Lighting.FogStart} end
+        Lighting.FogEnd=1e6
+        Lighting.FogStart=1e6
+    else
+        if orig_fog then
+            Lighting.FogEnd=orig_fog.FogEnd
+            Lighting.FogStart=orig_fog.FogStart
+            orig_fog=nil
+        end
+    end
+
+    Camera.FieldOfView=cfg.cam_fov
 end
 
 K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}
@@ -346,20 +392,18 @@ local TM=loadstring(game:HttpGet(repo..'addons/ThemeManager.lua'))()
 local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
 
 local W=Library:CreateWindow({Title='Karpa Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
-local T={Aimbot=W:AddTab('Aimbot'),ESP=W:AddTab('ESP'),Movement=W:AddTab('Movement'),Misc=W:AddTab('Misc'),['UI Settings']=W:AddTab('UI Settings')}
+local T={Aimbot=W:AddTab('Aimbot'),ESP=W:AddTab('ESP'),Movement=W:AddTab('Movement'),Misc=W:AddTab('Misc'),Visuals=W:AddTab('Visuals'),['UI Settings']=W:AddTab('UI Settings')}
 
 local function bk(tg,name,txt)
     tg:AddKeyPicker(name,{Default='None',SyncToggleState=true,Mode='Toggle',Text=txt or name,NoUI=false})
 end
 
 local AG=T.Aimbot:AddLeftGroupbox('Aimbot')
-local tAim=AG:AddToggle('AimEnabled',{Text='Enable Aimbot',Default=false,Callback=function(v) cfg.aim_enabled=v end})
-bk(tAim,'AimKey','Aimbot')
+local tAim=AG:AddToggle('AimEnabled',{Text='Enable Aimbot',Default=false,Callback=function(v) cfg.aim_enabled=v end}); bk(tAim,'AimKey','Aimbot')
 AG:AddToggle('AimHideClick',{Text='Hide Click (segurar botao direito)',Default=false,Callback=function(v) cfg.aim_hide_click=v end})
 AG:AddToggle('SilentAim',{Text='Silent Aim',Default=true,Callback=function(v) cfg.silent=v end})
 AG:AddSlider('AimFOV',{Text='FOV',Default=120,Min=20,Max=500,Rounding=0,Callback=function(v) cfg.fov=v end})
-local tFov=AG:AddToggle('FOVVisible',{Text='Show FOV Circle',Default=false,Callback=function(v) cfg.fov_visible=v end})
-bk(tFov,'FovKey','FOV Circle')
+local tFov=AG:AddToggle('FOVVisible',{Text='Show FOV Circle',Default=false,Callback=function(v) cfg.fov_visible=v end}); bk(tFov,'FovKey','FOV Circle')
 AG:AddToggle('VisibleCheck',{Text='Visible Check',Default=true,Callback=function(v) cfg.visible_check=v end})
 AG:AddToggle('ForceAim',{Text='Force Aim',Default=true,Callback=function(v) cfg.force_aim=v end})
 AG:AddDropdown('HitboxSelect',{Text='Hitbox',Values={'Head','UpperTorso','LowerTorso','HumanoidRootPart'},Default=1,Callback=function(v) cfg.hitbox=v end})
@@ -385,11 +429,17 @@ MG:AddSlider('JumpPower',{Text='Jump Power Value',Default=50,Min=16,Max=250,Roun
 local tIj=MG:AddToggle('InfiniteJump',{Text='Infinite Jump',Default=false,Callback=function(v) cfg.infinite_jump=v end}); bk(tIj,'IjKey','Infinite Jump')
 local tFl=MG:AddToggle('FlyEnabled',{Text='Fly',Default=false,Callback=function(v) cfg.fly=v end}); bk(tFl,'FlKey','Fly')
 MG:AddSlider('FlySpeed',{Text='Fly Speed',Default=50,Min=16,Max=250,Rounding=0,Callback=function(v) cfg.fly_speed=v end})
+local tNc=MG:AddToggle('Noclip',{Text='Noclip',Default=false,Callback=function(v) cfg.noclip=v end}); bk(tNc,'NcKey','Noclip')
 
 local MiG=T.Misc:AddLeftGroupbox('Misc')
 local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
 local tSb=MiG:AddToggle('Spinbot',{Text='Spinbot',Default=false,Callback=function(v) cfg.spinbot=v end}); bk(tSb,'SbKey','Spinbot')
-MiG:AddSlider('SpinSpeed',{Text='Spin Speed',Default=360,Min=30,Max=2000,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
+MiG:AddSlider('SpinSpeed',{Text='Spin Speed (graus/seg)',Default=360,Min=30,Max=1440,Rounding=0,Callback=function(v) cfg.spin_speed=v end})
+
+local VG=T.Visuals:AddLeftGroupbox('Visuals')
+local tFb=VG:AddToggle('Fullbright',{Text='Fullbright',Default=false,Callback=function(v) cfg.fullbright=v end}); bk(tFb,'FbKey','Fullbright')
+local tNf=VG:AddToggle('NoFog',{Text='No Fog',Default=false,Callback=function(v) cfg.no_fog=v end}); bk(tNf,'NfKey','No Fog')
+VG:AddSlider('CamFOV',{Text='Camera FOV',Default=70,Min=40,Max=120,Rounding=0,Callback=function(v) cfg.cam_fov=v end})
 
 local MenuG=T['UI Settings']:AddLeftGroupbox('Menu')
 MenuG:AddButton('Unload',function() Library:Unload() end)
@@ -403,6 +453,16 @@ SM:BuildConfigSection(T['UI Settings'])
 TM:ApplyToTab(T['UI Settings'])
 SM:LoadAutoloadConfig()
 
-RunService.RenderStepped:Connect(function(dt)
-    K.update_esp(); K.update_aim(); K.update_movement(); K.update_misc(dt)
+RunService.RenderStepped:Connect(function()
+    K.update_esp(); K.update_fov(); K.update_movement()
+    K.update_noclip(); K.update_misc(); K.update_visuals()
+end)
+
+RunService:BindToRenderStep("KarpaAim", Enum.RenderPriority.Camera.Value + 1, function()
+    if not cfg.aim_enabled then return end
+    local act = true
+    if cfg.aim_hide_click then act = rmb_down end
+    if not act then return end
+    local t = target()
+    if t then aim(t) end
 end)
