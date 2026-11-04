@@ -216,7 +216,8 @@ function K.update_esp()
             for j=i,#o.skeleton do o.skeleton[j].Visible=false end
         else for _,l in ipairs(o.skeleton) do l.Visible=false end end
     end
-endlocal fovc=Drawing.new("Circle")
+end
+local fovc=Drawing.new("Circle")
 fovc.Thickness=1; fovc.NumSides=64
 fovc.Color=Color3.fromRGB(255,255,255); fovc.Transparency=0.5; fovc.Filled=false; fovc.Visible=false
 K.fov_circle=fovc
@@ -384,7 +385,8 @@ function K.update_car()
     else
         car_prompt_text.Visible = false
     end
-endlocal fly=nil
+end
+local fly=nil
 function K.update_movement(dt)
     local c=LocalPlayer.Character
     if not c then return end
