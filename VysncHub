@@ -305,7 +305,7 @@ local car_prompt_text = Drawing.new("Text")
 car_prompt_text.Size = 16
 car_prompt_text.Center = true
 car_prompt_text.Outline = true
-car_prompt_text.Color = Color3.fromRGB(255, 0, 0)
+car_prompt_text.Color = Color3.fromRGB(255, 255, 255)
 car_prompt_text.Visible = false
 
 local function get_closest_car()
@@ -514,14 +514,11 @@ end
 
 K.services={RunService=RunService,Players=Players,UserInputService=UserInputService,Camera=Camera,LocalPlayer=LocalPlayer}
 
+-- LINORIA NORMAL, SEM MUDAR CORES
 local repo='https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
 local Library=loadstring(game:HttpGet(repo..'Library.lua'))()
 local TM=loadstring(game:HttpGet(repo..'addons/ThemeManager.lua'))()
 local SM=loadstring(game:HttpGet(repo..'addons/SaveManager.lua'))()
-
--- APENAS OS SLIDERS FICAM VERMELHOS (ACCENT COLOR)
-Library.AccentColor     = Color3.fromRGB(255, 0, 0)
-Library.AccentColorDark = Color3.fromRGB(150, 0, 0)
 
 local W=Library:CreateWindow({Title='Karpa Hub',Center=true,AutoShow=true,TabPadding=8,MenuFadeTime=0.2})
 local MainTab=W:AddTab('Main')
