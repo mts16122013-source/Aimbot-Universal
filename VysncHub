@@ -19,7 +19,8 @@ K.cfg = {
     jump_power=50, jump_enabled=false, infinite_jump=false, fly=false, fly_speed=50, noclip=false,
     freeze_anims=false, spinbot=false, spin_speed=360, fullbright=false,
     grab_car=false,
-    eat_anim_id="rbxassetid://0000000000", -- Coloca o ID do bang do Infinity Weld aqui
+    -- TROCA O ID DA ANIMAÇÃO AQUI EMBAIXO (Mantém o rbxassetid://)
+    eat_anim_id="rbxassetid://0000000000", 
 }
 local cfg = K.cfg
 
@@ -568,18 +569,7 @@ EG:AddDropdown('LineOrigin',{Text='Line Origin',Values={'top','bottom','center'}
 local XG=ExploitTab:AddLeftGroupbox('Exploits')
 XG:AddButton('Desalgemar', function() K.uncuff() end)
 XG:AddToggle('GrabCar',{Text='Pegar/Jogar Carro (Y)',Default=false,Callback=function(v) cfg.grab_car=v end})
-local tEat = XG:AddToggle('EatPlayer',{Text='Comer Player (Bang)',Default=false,Callback=function(v) K.toggle_eat(v) end})
-XG:AddTextbox('EatAnimId',{
-    Text = 'ID da Animação',
-    Default = 'rbxassetid://0000000000',
-    Numeric = false,
-    Finished = false,
-    ClearOnFocus = false,
-    Callback = function(text) 
-        cfg.eat_anim_id = text 
-        if eat_track then eat_track:Stop() eat_track = nil end
-    end
-})
+XG:AddToggle('EatPlayer',{Text='Comer Player (Bang)',Default=false,Callback=function(v) K.toggle_eat(v) end})
 
 local MiG=ExploitTab:AddRightGroupbox('Misc')
 local tFz=MiG:AddToggle('FreezeAnims',{Text='Freeze Anims',Default=false,Callback=function(v) cfg.freeze_anims=v; if not v then K.restore_anims() end end}); bk(tFz,'FzKey','Freeze Anims')
